@@ -46,4 +46,22 @@ struct PanelStateTests {
         state.mouseExited()
         #expect(state.isExpanded == false)
     }
+
+    @MainActor
+    @Test("autoExpand sets expanded and confirmationsActive")
+    func autoExpandSetsExpandedAndFlag() {
+        let state = PanelState()
+        state.autoExpand()
+        #expect(state.isExpanded == true)
+        #expect(state.confirmationsActive == true)
+    }
+
+    @MainActor
+    @Test("mouseExited stays expanded when confirmations active")
+    func mouseExitedStaysExpandedWhenConfirmationsActive() {
+        let state = PanelState()
+        state.autoExpand()
+        state.mouseExited()
+        #expect(state.isExpanded == true)
+    }
 }

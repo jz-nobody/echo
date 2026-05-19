@@ -28,6 +28,15 @@ enum DesignTokens {
     static let textSecondary = Color(nsColor: NSColor(hex: "#8E8E93"))
     static let textCode = Color(nsColor: NSColor(hex: "#30D158"))
 
+    // MARK: - Confirmation
+    static let diffAdded = Color(nsColor: NSColor(hex: "#30D158"))
+    static let diffRemoved = Color(nsColor: NSColor(hex: "#FF453A"))
+    static let choiceOptionBackground = Color(nsColor: NSColor(hex: "#1E3A3A"))
+    static let shortcutBadgeBackground = Color(nsColor: NSColor(hex: "#3A3A3C"))
+    static let confirmationAllowBackground = Color.white
+    static let confirmationAllowText = Color.black
+    static let confirmationDenyBackground = Color(nsColor: NSColor(hex: "#3A3A3C"))
+
     // MARK: - Dimensions
     static let compactBarHeight: CGFloat = 32
     static let compactBarPaddingH: CGFloat = 12
@@ -36,6 +45,10 @@ enum DesignTokens {
     static let panelMaxHeight: CGFloat = 560
     static let panelMaxWidth: CGFloat = 640
     static let panelCornerRadius: CGFloat = 12
+    static let confirmationButtonHeight: CGFloat = 44
+    static let confirmationButtonRadius: CGFloat = 8
+    static let optionCardHeight: CGFloat = 44
+    static let optionCardRadius: CGFloat = 8
 }
 
 enum AnimationConstants {

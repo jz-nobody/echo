@@ -6,6 +6,7 @@ final class WindowController: NSObject {
     private var panel: NSPanel?
     private let panelState = PanelState()
     private let sessionManager: SessionManager
+    private let confirmationQueue = ConfirmationQueue()
     private var hostingView: NSHostingView<AnyView>?
     private var notchInfo: NotchInfo?
 
@@ -26,7 +27,8 @@ final class WindowController: NSObject {
 
         let rootView = NotchRootView(
             panelState: panelState,
-            sessionManager: sessionManager
+            sessionManager: sessionManager,
+            confirmationQueue: confirmationQueue
         )
         let hosting = NSHostingView(rootView: AnyView(rootView))
         hosting.frame = NSRect(x: 0, y: 0, width: barWidth, height: barHeight)
@@ -84,12 +86,61 @@ final class WindowController: NSObject {
     private func setupKeyMonitor() {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.panelState.isExpanded else { return event }
-            if event.keyCode == 53 { // ESC
+
+            if event.keyCode == 53 {
+                self.panelState.confirmationsActive = false
                 self.panelState.collapse()
                 self.updatePanelFrame()
                 return nil
             }
+
+            guard let current = self.confirmationQueue.currentItem else { return event }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+            if flags == .command, let chars = event.charactersIgnoringModifiers {
+                switch chars {
+                case "y":
+                    if current.confirmation.type == .permission {
+                        self.handleConfirmationResponse(current, .allow)
+                        return nil
+                    }
+                case "n":
+                    if current.confirmation.type == .permission {
+                        self.handleConfirmationResponse(current, .deny)
+                        return nil
+                    }
+                default:
+                    if let digit = Int(chars), digit >= 1, digit <= 9 {
+                        if case .choice(let details) = current.confirmation.details {
+                            let index = digit - 1
+                            if index < details.options.count {
+                                self.handleConfirmationResponse(current, .select(optionId: details.options[index].id))
+                                return nil
+                            }
+                        }
+                    }
+                }
+            }
             return event
+        }
+    }
+
+    private func handleConfirmationResponse(_ item: QueuedConfirmation, _ response: ConfirmationResponse) {
+        Task {
+            try? await sessionManager.respond(
+                session: item.session,
+                confirmation: item.confirmation,
+                response: response
+            )
+            confirmationQueue.update(
+                from: sessionManager.pendingConfirmations,
+                sessions: sessionManager.sessions
+            )
+            if confirmationQueue.isEmpty {
+                panelState.confirmationsActive = false
+                panelState.collapse()
+                updatePanelFrame()
+            }
         }
     }
 

@@ -4,6 +4,7 @@ import Foundation
 @Observable
 final class PanelState {
     private(set) var isExpanded = false
+    var confirmationsActive = false
     private var expandTimer: Timer?
 
     let hoverDelay: TimeInterval
@@ -24,7 +25,7 @@ final class PanelState {
     func mouseExited() {
         expandTimer?.invalidate()
         expandTimer = nil
-        collapse()
+        if !confirmationsActive { collapse() }
     }
 
     func expand() {
@@ -33,6 +34,12 @@ final class PanelState {
 
     func collapse() {
         isExpanded = false
+    }
+
+    func autoExpand() {
+        confirmationsActive = true
+        expandTimer?.invalidate()
+        expand()
     }
 
     func toggle() {

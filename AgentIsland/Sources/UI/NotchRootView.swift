@@ -3,6 +3,7 @@ import SwiftUI
 struct NotchRootView: View {
     let panelState: PanelState
     var sessionManager: SessionManager
+    let confirmationQueue: ConfirmationQueue
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,14 +15,37 @@ struct NotchRootView: View {
             .frame(height: DesignTokens.compactBarHeight)
 
             if panelState.isExpanded {
-                ExpandedPanelView(sessions: sessionManager.sessions)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                ExpandedPanelView(
+                    sessions: sessionManager.sessions,
+                    confirmationQueue: confirmationQueue,
+                    onRespond: { item, response in
+                        Task {
+                            try? await sessionManager.respond(
+                                session: item.session,
+                                confirmation: item.confirmation,
+                                response: response
+                            )
+                        }
+                    }
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .animation(
             panelState.isExpanded ? AnimationConstants.panelExpand : AnimationConstants.panelCollapse,
             value: panelState.isExpanded
         )
+        .onChange(of: sessionManager.pendingConfirmations.count) {
+            confirmationQueue.update(
+                from: sessionManager.pendingConfirmations,
+                sessions: sessionManager.sessions
+            )
+            if !confirmationQueue.isEmpty {
+                panelState.autoExpand()
+            } else {
+                panelState.confirmationsActive = false
+            }
+        }
     }
 
     private var elapsedTimeText: String? {
