@@ -5,6 +5,7 @@ import SwiftUI
 final class WindowController: NSObject {
     private var panel: NSPanel?
     private let panelState = PanelState()
+    private let sessionManager: SessionManager
     private var hostingView: NSHostingView<AnyView>?
     private var notchInfo: NotchInfo?
 
@@ -13,7 +14,8 @@ final class WindowController: NSObject {
     private let expandedHeight: CGFloat = 300
     private let expandedWidth: CGFloat = 400
 
-    override init() {
+    init(sessionManager: SessionManager) {
+        self.sessionManager = sessionManager
         super.init()
     }
 
@@ -24,9 +26,7 @@ final class WindowController: NSObject {
 
         let rootView = NotchRootView(
             panelState: panelState,
-            status: .executing,
-            sessionCount: 2,
-            elapsedTime: "3m"
+            sessionManager: sessionManager
         )
         let hosting = NSHostingView(rootView: AnyView(rootView))
         hosting.frame = NSRect(x: 0, y: 0, width: barWidth, height: barHeight)

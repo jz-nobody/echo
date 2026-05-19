@@ -1,15 +1,23 @@
 import SwiftUI
 
 struct ExpandedPanelView: View {
+    let sessions: [AgentSession]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Active Sessions")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(DesignTokens.textPrimary)
 
-            Text("No active tasks")
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(DesignTokens.textSecondary)
+            if sessions.isEmpty {
+                Text("No active tasks")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(DesignTokens.textSecondary)
+            } else {
+                ForEach(sessions) { session in
+                    SessionRowView(session: session)
+                }
+            }
 
             Spacer()
         }
@@ -21,10 +29,4 @@ struct ExpandedPanelView: View {
         )
         .shadow(color: .black.opacity(0.5), radius: 12, x: 0, y: 4)
     }
-}
-
-#Preview {
-    ExpandedPanelView()
-        .padding()
-        .background(Color.gray.opacity(0.2))
 }
