@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Pre-commit hook: 检查当天的 devlog 文件是否存在
+# 确保每次提交前都有当天的开发日志
+
+TODAY=$(date +%Y-%m-%d)
+DEVLOG_FILE="devlog/${TODAY}.md"
+
+if [ ! -f "$DEVLOG_FILE" ]; then
+    echo ""
+    echo "ERROR: 今天的开发日志不存在！"
+    echo ""
+    echo "  请先创建: ${DEVLOG_FILE}"
+    echo "  模板位于: devlog/template.md"
+    echo ""
+    echo "  快速创建: cp devlog/template.md ${DEVLOG_FILE}"
+    echo ""
+    exit 1
+fi
+
+exit 0
