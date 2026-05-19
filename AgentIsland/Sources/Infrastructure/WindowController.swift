@@ -9,7 +9,13 @@ final class WindowController {
     func showCompactBar() {
         let notchInfo = NotchDetector.detect()
         let panel = createPanel(notchInfo: notchInfo)
-        let hostingView = NSHostingView(rootView: CompactBarPlaceholder())
+        let barView = CompactBarView(
+            status: .executing,
+            sessionCount: 2,
+            elapsedTime: "3m"
+        )
+        let hostingView = NSHostingView(rootView: barView)
+        hostingView.frame = NSRect(x: 0, y: 0, width: barWidth, height: barHeight)
         panel.contentView = hostingView
         panel.orderFrontRegardless()
         self.panel = panel
@@ -44,20 +50,3 @@ final class WindowController {
     }
 }
 
-private struct CompactBarPlaceholder: View {
-    var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(Color(nsColor: NSColor(hex: "#0A84FF")))
-                .frame(width: 8, height: 8)
-            Text("Agent Island")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white)
-            Spacer()
-        }
-        .padding(.horizontal, 12)
-        .frame(width: 200, height: 32)
-        .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
