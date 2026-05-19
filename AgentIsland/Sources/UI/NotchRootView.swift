@@ -10,7 +10,8 @@ struct NotchRootView: View {
             CompactBarView(
                 status: sessionManager.aggregateStatus,
                 sessionCount: sessionManager.activeSessionCount,
-                elapsedTime: elapsedTimeText
+                elapsedTime: elapsedTimeText,
+                isOffline: sessionManager.health.isAnyOffline
             )
             .frame(height: DesignTokens.compactBarHeight)
 

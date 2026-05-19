@@ -4,14 +4,15 @@ struct CompactBarView: View {
     let status: SessionStatus
     let sessionCount: Int
     let elapsedTime: String?
+    var isOffline: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
             StatusDotView(status: status)
 
-            Text(status.displayText)
+            Text(isOffline ? "Offline" : status.displayText)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(DesignTokens.textPrimary)
+                .foregroundStyle(isOffline ? DesignTokens.statusError : DesignTokens.textPrimary)
 
             Spacer(minLength: 4)
 
