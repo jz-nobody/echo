@@ -32,11 +32,24 @@ Agent Island 是一款嵌入 Mac 刘海区的多 AI Agent 状态聚合器，用�
 ## 开发工作流（简述）
 
 1. **开始工作前** → 阅读 `devlog/` 最新条目 + `project.md` 确认当前步骤
-2. **编码** → 参照对应的 docs/ 规范文件，每个逻辑变更一次 commit
-3. **验证** → build 通过 + 测试通过 + 手动验证匹配验收标准
-4. **收尾** → 创建/更新当天 `devlog/YYYY-MM-DD.md` + 更新 `project.md`
+2. **创建功能分支** → `git checkout -b step/N-description` 从 main 拉出
+3. **设计测试用例** → 编码前先明确模块的测试场景（正常/边界/错误）
+4. **编码** → 参照对应的 docs/ 规范文件，每个逻辑变更一次 commit
+5. **模块化测试验收** → build 通过 + 单元测试全部通过 + 手动验证匹配验收标准
+6. **合并到主分支** → 验证通过后 `git checkout main && git merge step/N-description`
+7. **收尾** → 创建/更新当天 `devlog/YYYY-MM-DD.md` + 更新 `project.md`
 
 完整流程见 `docs/dev-workflow.md`。
+
+---
+
+## Git 版本管理准则
+
+- **主分支 `main` 始终稳定可运行**，只接受验证通过的合并
+- **每个 Step 在独立功能分支上开发**，命名 `step/N-description`
+- **每次 commit 都是可回滚节点**，message 清晰描述变更
+- **合并后打 tag**：`git tag step-N-done`
+- **不删除已合并分支**，保留完整开发历史方便回溯
 
 ---
 
