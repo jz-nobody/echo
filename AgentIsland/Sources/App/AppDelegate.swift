@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let settings = SettingsStore()
+        settings.loginItemManager = LoginItemManager()
         self.settingsStore = settings
 
         let soundPlayer = SoundPlayer(settings: settings)

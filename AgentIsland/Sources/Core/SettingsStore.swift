@@ -9,7 +9,10 @@ enum DisplayMode: String, Codable, CaseIterable {
 @Observable
 final class SettingsStore {
     // MARK: - General
-    var launchAtLogin: Bool { didSet { persist() } }
+    var loginItemManager: (any LoginItemManaging)? {
+        didSet { loginItemManager?.setEnabled(launchAtLogin) }
+    }
+    var launchAtLogin: Bool { didSet { persist(); loginItemManager?.setEnabled(launchAtLogin) } }
     var hoverToExpand: Bool { didSet { persist() } }
     var hoverDelay: TimeInterval { didSet { persist() } }
     var smartSuppression: Bool { didSet { persist() } }
