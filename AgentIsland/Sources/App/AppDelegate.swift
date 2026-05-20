@@ -34,7 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsStore()
         self.settingsStore = settings
 
-        let manager = SessionManager(adaptors: adaptors)
+        let soundPlayer = SoundPlayer(settings: settings)
+        let manager = SessionManager(adaptors: adaptors, soundPlayer: soundPlayer)
         manager.startPolling()
 
         self.sessionManager = manager

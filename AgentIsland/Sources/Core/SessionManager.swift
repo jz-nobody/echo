@@ -12,6 +12,9 @@ final class SessionManager {
     private var pollTask: Task<Void, Never>?
     let pollInterval: TimeInterval
     let retryPolicy: RetryPolicy
+    private let soundPlayer: (any SoundPlayable)?
+    private let eventDetector = SessionEventDetector()
+    private var idleTimers: [String: Date] = [:]
 
     var aggregateStatus: SessionStatus {
         SessionStatus.highest(sessions.map(\.status))
@@ -25,12 +28,14 @@ final class SessionManager {
         adaptors: [any AgentAdaptor],
         pollInterval: TimeInterval = 2.0,
         retryPolicy: RetryPolicy = .standard,
-        health: AdaptorHealth = AdaptorHealth()
+        health: AdaptorHealth = AdaptorHealth(),
+        soundPlayer: (any SoundPlayable)? = nil
     ) {
         self.adaptors = adaptors
         self.pollInterval = pollInterval
         self.retryPolicy = retryPolicy
         self.health = health
+        self.soundPlayer = soundPlayer
     }
 
     func startPolling() {
@@ -57,6 +62,12 @@ final class SessionManager {
     ) async throws {
         for adaptor in adaptors where adaptor.agentType == session.agentType {
             try await adaptor.respond(session: session, confirmation: confirmation, response: response)
+        }
+        switch response {
+        case .allow, .select:
+            soundPlayer?.play(.confirmationApproved)
+        case .deny:
+            soundPlayer?.play(.confirmationDenied)
         }
         await pollOnce()
     }
@@ -99,5 +110,38 @@ final class SessionManager {
 
         self.sessions = newSessions
         self.pendingConfirmations = newConfirmations
+
+        let events = eventDetector.detect(
+            sessions: newSessions,
+            confirmations: newConfirmations,
+            health: health
+        )
+        for event in events {
+            soundPlayer?.play(event)
+        }
+
+        checkIdleReminders(sessions: newSessions)
+    }
+
+    private func checkIdleReminders(sessions: [AgentSession]) {
+        let idleSessions = sessions.filter { $0.status == .idle }
+        let activeIDs = Set(sessions.map(\.id))
+
+        idleTimers = idleTimers.filter { id, _ in
+            activeIDs.contains(id) && idleSessions.contains(where: { $0.id == id })
+        }
+
+        for session in idleSessions where idleTimers[session.id] == nil {
+            idleTimers[session.id] = Date()
+        }
+
+        let threshold: TimeInterval = 300
+        for (_, idleSince) in idleTimers {
+            if Date().timeIntervalSince(idleSince) >= threshold {
+                soundPlayer?.play(.idleReminder)
+                idleTimers = idleTimers.mapValues { _ in Date() }
+                break
+            }
+        }
     }
 }
