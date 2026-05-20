@@ -10,8 +10,13 @@ struct NotchInfo {
 }
 
 enum NotchDetector {
+    private static let noNotchBarOffset: CGFloat = 100
+
     static func detect(for screen: NSScreen? = nil) -> NotchInfo {
-        let targetScreen = screen ?? NSScreen.main ?? NSScreen.screens.first!
+        guard let targetScreen = screen ?? NSScreen.main ?? NSScreen.screens.first else {
+            return NotchInfo(hasNotch: false, notchWidth: 0, notchHeight: 24,
+                             screenFrame: .zero, barOriginX: noNotchBarOffset, barOriginY: 0)
+        }
         let frame = targetScreen.frame
         let visibleFrame = targetScreen.visibleFrame
 
@@ -27,7 +32,7 @@ enum NotchDetector {
             let notchRightEdge = notchCenterX + (notchWidth / 2)
             barOriginX = notchRightEdge + 4
         } else {
-            barOriginX = frame.midX + 100
+            barOriginX = frame.midX + noNotchBarOffset
         }
 
         let barOriginY = frame.maxY - notchHeight

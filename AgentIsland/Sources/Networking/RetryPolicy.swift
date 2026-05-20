@@ -22,7 +22,7 @@ struct RetryPolicy: Sendable {
                 throw error
             }
         }
-        throw lastError!
+        throw lastError ?? MCPError.connectionFailed("All retry attempts exhausted")
     }
 
     func delayForAttempt(_ attempt: Int) -> TimeInterval {

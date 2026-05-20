@@ -143,12 +143,17 @@ final class WindowController: NSObject {
     }
 
     private func handleConfirmationResponse(_ item: QueuedConfirmation, _ response: ConfirmationResponse) {
-        Task {
-            try? await sessionManager.respond(
-                session: item.session,
-                confirmation: item.confirmation,
-                response: response
-            )
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await sessionManager.respond(
+                    session: item.session,
+                    confirmation: item.confirmation,
+                    response: response
+                )
+            } catch {
+                NSLog("[AgentIsland] Confirmation response failed: \(error)")
+            }
             confirmationQueue.update(
                 from: sessionManager.pendingConfirmations,
                 sessions: sessionManager.sessions

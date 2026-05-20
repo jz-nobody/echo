@@ -32,11 +32,15 @@ struct NotchRootView: View {
                     },
                     onRespond: { item, response in
                         Task {
-                            try? await sessionManager.respond(
-                                session: item.session,
-                                confirmation: item.confirmation,
-                                response: response
-                            )
+                            do {
+                                try await sessionManager.respond(
+                                    session: item.session,
+                                    confirmation: item.confirmation,
+                                    response: response
+                                )
+                            } catch {
+                                NSLog("[AgentIsland] Respond failed: \(error)")
+                            }
                         }
                     }
                 )

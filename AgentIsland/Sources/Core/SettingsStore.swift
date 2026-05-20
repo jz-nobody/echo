@@ -8,46 +8,35 @@ enum DisplayMode: String, Codable, CaseIterable {
 @MainActor
 @Observable
 final class SettingsStore {
-    // MARK: - General > System
+    // MARK: - General
     var launchAtLogin: Bool { didSet { persist() } }
-    // MARK: - General > Expand
     var hoverToExpand: Bool { didSet { persist() } }
     var hoverDelay: TimeInterval { didSet { persist() } }
     var smartSuppression: Bool { didSet { persist() } }
-    // MARK: - General > Visibility
     var hideInFullscreen: Bool { didSet { persist() } }
     var hideWhenNoActiveSessions: Bool { didSet { persist() } }
-    // MARK: - General > Collapse
     var autoCollapseOnMouseExit: Bool { didSet { persist() } }
     var autoReminderDuration: TimeInterval { didSet { persist() } }
     var dismissOnClickOutside: Bool { didSet { persist() } }
-    // MARK: - General > Interaction
     var agentTeamAutoExpand: Bool { didSet { persist() } }
     var idleCleanupInterval: TimeInterval { didSet { persist() } }
     var disableClickToJump: Bool { didSet { persist() } }
-
-    // MARK: - Display > Notch
+    // MARK: - Display
     var displayMode: DisplayMode { didSet { persist() } }
     var monitorSelection: Int { didSet { persist() } }
-    // MARK: - Display > Panel
     var panelFontSize: CGFloat { didSet { persist() } }
     var completionCardHeight: CGFloat { didSet { persist() } }
     var maxPanelHeight: CGFloat { didSet { persist() } }
     var maxPanelWidth: CGFloat { didSet { persist() } }
-    // MARK: - Display > Fine-tuning
     var notchWidthOffset: CGFloat { didSet { persist() } }
     var notchHeightOffset: CGFloat { didSet { persist() } }
-    // MARK: - Display > Sub-agent
     var showSubAgentDetails: Bool { didSet { persist() } }
-
     // MARK: - Notification Filter
     var enableBuiltInFilters: Bool { didSet { persist() } }
     var filterKeywords: [String] { didSet { persist() } }
-
     // MARK: - Sound
     var soundEnabled: Bool { didSet { persist() } }
     var soundVolume: Float { didSet { persist() } }
-    // MARK: - Sound Events
     var soundSessionStart: String { didSet { persist() } }
     var soundSessionEnd: String { didSet { persist() } }
     var soundConfirmationArrived: String { didSet { persist() } }
@@ -63,83 +52,39 @@ final class SettingsStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        // General
-        launchAtLogin = true
-        hoverToExpand = true
-        hoverDelay = 0.15
-        smartSuppression = true
-        hideInFullscreen = true
-        hideWhenNoActiveSessions = false
-        autoCollapseOnMouseExit = true
-        autoReminderDuration = 5.0
-        dismissOnClickOutside = false
-        agentTeamAutoExpand = false
-        idleCleanupInterval = 7200
-        disableClickToJump = false
-        // Notification Filter
-        enableBuiltInFilters = true
-        filterKeywords = []
-        // Display
-        displayMode = .detailed
-        monitorSelection = 0
-        panelFontSize = 11
-        completionCardHeight = 90
-        maxPanelHeight = 560
-        maxPanelWidth = 640
-        notchWidthOffset = 0
-        notchHeightOffset = 0
-        showSubAgentDetails = false
-        // Sound
-        soundEnabled = true
-        soundVolume = 0.3
-        soundSessionStart = "default"
-        soundSessionEnd = "default"
-        soundConfirmationArrived = "default"
-        soundConfirmationApproved = "default"
-        soundConfirmationDenied = "default"
-        soundError = "default"
-        soundReconnected = "default"
-        soundIdleReminder = "default"
+        launchAtLogin = true; hoverToExpand = true; hoverDelay = 0.15
+        smartSuppression = true; hideInFullscreen = true; hideWhenNoActiveSessions = false
+        autoCollapseOnMouseExit = true; autoReminderDuration = 5.0; dismissOnClickOutside = false
+        agentTeamAutoExpand = false; idleCleanupInterval = 7200; disableClickToJump = false
+        enableBuiltInFilters = true; filterKeywords = []
+        displayMode = .detailed; monitorSelection = 0; panelFontSize = 11
+        completionCardHeight = 90; maxPanelHeight = 560; maxPanelWidth = 640
+        notchWidthOffset = 0; notchHeightOffset = 0; showSubAgentDetails = false
+        soundEnabled = true; soundVolume = 0.3
+        soundSessionStart = "default"; soundSessionEnd = "default"
+        soundConfirmationArrived = "default"; soundConfirmationApproved = "default"
+        soundConfirmationDenied = "default"; soundError = "default"
+        soundReconnected = "default"; soundIdleReminder = "default"
         load()
     }
 
     func resetToDefaults() {
-        launchAtLogin = true
-        hoverToExpand = true
-        hoverDelay = 0.15
-        smartSuppression = true
-        hideInFullscreen = true
-        hideWhenNoActiveSessions = false
-        autoCollapseOnMouseExit = true
-        autoReminderDuration = 5.0
-        dismissOnClickOutside = false
-        agentTeamAutoExpand = false
-        idleCleanupInterval = 7200
-        disableClickToJump = false
-        enableBuiltInFilters = true
-        filterKeywords = []
-        displayMode = .detailed
-        monitorSelection = 0
-        panelFontSize = 11
-        completionCardHeight = 90
-        maxPanelHeight = 560
-        maxPanelWidth = 640
-        notchWidthOffset = 0
-        notchHeightOffset = 0
-        showSubAgentDetails = false
-        soundEnabled = true
-        soundVolume = 0.3
-        soundSessionStart = "default"
-        soundSessionEnd = "default"
-        soundConfirmationArrived = "default"
-        soundConfirmationApproved = "default"
-        soundConfirmationDenied = "default"
-        soundError = "default"
-        soundReconnected = "default"
-        soundIdleReminder = "default"
+        isLoading = true
+        defer { isLoading = false; persist() }
+        launchAtLogin = true; hoverToExpand = true; hoverDelay = 0.15
+        smartSuppression = true; hideInFullscreen = true; hideWhenNoActiveSessions = false
+        autoCollapseOnMouseExit = true; autoReminderDuration = 5.0; dismissOnClickOutside = false
+        agentTeamAutoExpand = false; idleCleanupInterval = 7200; disableClickToJump = false
+        enableBuiltInFilters = true; filterKeywords = []
+        displayMode = .detailed; monitorSelection = 0; panelFontSize = 11
+        completionCardHeight = 90; maxPanelHeight = 560; maxPanelWidth = 640
+        notchWidthOffset = 0; notchHeightOffset = 0; showSubAgentDetails = false
+        soundEnabled = true; soundVolume = 0.3
+        soundSessionStart = "default"; soundSessionEnd = "default"
+        soundConfirmationArrived = "default"; soundConfirmationApproved = "default"
+        soundConfirmationDenied = "default"; soundError = "default"
+        soundReconnected = "default"; soundIdleReminder = "default"
     }
-
-    // MARK: - Persistence
 
     private func key(_ name: String) -> String { Self.keyPrefix + name }
 
