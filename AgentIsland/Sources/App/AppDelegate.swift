@@ -40,10 +40,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         self.sessionManager = manager
         let frontmostAppMonitor = FrontmostAppMonitor()
+        let windowActivator = WindowActivator(settingsStore: settings)
         windowController = WindowController(
             sessionManager: manager,
             settingsStore: settings,
-            frontmostAppMonitor: frontmostAppMonitor
+            frontmostAppMonitor: frontmostAppMonitor,
+            windowActivator: windowActivator
         )
         windowController?.showCompactBar()
     }

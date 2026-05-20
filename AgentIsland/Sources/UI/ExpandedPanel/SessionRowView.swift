@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SessionRowView: View {
     let session: AgentSession
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -36,6 +37,8 @@ struct SessionRowView: View {
         .padding(.horizontal, 10)
         .background(DesignTokens.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .contentShape(Rectangle())
+        .onTapGesture { onTap?() }
     }
 
     private var agentTag: some View {

@@ -3,6 +3,7 @@ import SwiftUI
 struct ExpandedPanelView: View {
     let sessions: [AgentSession]
     let confirmationQueue: ConfirmationQueue
+    var onSessionTap: ((AgentSession) -> Void)? = nil
     let onRespond: (QueuedConfirmation, ConfirmationResponse) -> Void
 
     var body: some View {
@@ -35,7 +36,9 @@ struct ExpandedPanelView: View {
                     .foregroundStyle(DesignTokens.textSecondary)
             } else {
                 ForEach(sessions) { session in
-                    SessionRowView(session: session)
+                    SessionRowView(session: session, onTap: {
+                        onSessionTap?(session)
+                    })
                 }
             }
         }

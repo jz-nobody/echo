@@ -8,6 +8,7 @@ final class WindowController: NSObject {
     private let sessionManager: SessionManager
     private let settingsStore: SettingsStore
     private let frontmostAppMonitor: FrontmostAppMonitor
+    private let windowActivator: WindowActivator
     private let confirmationQueue = ConfirmationQueue()
     private var hostingView: NSHostingView<AnyView>?
     private var notchInfo: NotchInfo?
@@ -17,10 +18,11 @@ final class WindowController: NSObject {
     private let barWidth: CGFloat = 200
     private let barHeight: CGFloat = 32
 
-    init(sessionManager: SessionManager, settingsStore: SettingsStore, frontmostAppMonitor: FrontmostAppMonitor) {
+    init(sessionManager: SessionManager, settingsStore: SettingsStore, frontmostAppMonitor: FrontmostAppMonitor, windowActivator: WindowActivator) {
         self.sessionManager = sessionManager
         self.settingsStore = settingsStore
         self.frontmostAppMonitor = frontmostAppMonitor
+        self.windowActivator = windowActivator
         self.panelState = PanelState(settingsStore: settingsStore)
         super.init()
     }
@@ -34,7 +36,8 @@ final class WindowController: NSObject {
             panelState: panelState,
             sessionManager: sessionManager,
             confirmationQueue: confirmationQueue,
-            frontmostAppMonitor: frontmostAppMonitor
+            frontmostAppMonitor: frontmostAppMonitor,
+            windowActivator: windowActivator
         )
         let hosting = NSHostingView(rootView: AnyView(rootView))
         hosting.frame = NSRect(x: 0, y: 0, width: barWidth, height: barHeight)

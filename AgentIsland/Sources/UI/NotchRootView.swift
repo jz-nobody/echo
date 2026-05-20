@@ -5,6 +5,7 @@ struct NotchRootView: View {
     var sessionManager: SessionManager
     let confirmationQueue: ConfirmationQueue
     let frontmostAppMonitor: FrontmostAppMonitor
+    let windowActivator: any WindowActivating
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,6 +21,11 @@ struct NotchRootView: View {
                 ExpandedPanelView(
                     sessions: sessionManager.sessions,
                     confirmationQueue: confirmationQueue,
+                    onSessionTap: { session in
+                        if windowActivator.jumpToSession(session) {
+                            panelState.collapse()
+                        }
+                    },
                     onRespond: { item, response in
                         Task {
                             try? await sessionManager.respond(
