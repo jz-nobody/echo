@@ -5,6 +5,11 @@ import Foundation
 @Suite("SessionManager Sound Tests", .serialized)
 struct SessionManagerSoundTests {
 
+    @MainActor
+    private func makeSettings() -> SettingsStore {
+        SettingsStore(defaults: UserDefaults(suiteName: "test-sms-\(UUID())")!)
+    }
+
     private func makeSession(
         id: String = "s1",
         status: SessionStatus = .executing,
@@ -39,7 +44,7 @@ struct SessionManagerSoundTests {
     func pollOnceTriggersSessionStart() async {
         let mock = MockAgentAdaptor()
         let soundPlayer = MockSoundPlayer()
-        let manager = SessionManager(adaptors: [mock], soundPlayer: soundPlayer)
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings(), soundPlayer: soundPlayer)
 
         await mock.setAvailable(true)
         await mock.setSessions([])
@@ -58,7 +63,7 @@ struct SessionManagerSoundTests {
     func respondAllowTriggersApproved() async throws {
         let mock = MockAgentAdaptor()
         let soundPlayer = MockSoundPlayer()
-        let manager = SessionManager(adaptors: [mock], soundPlayer: soundPlayer)
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings(), soundPlayer: soundPlayer)
         await mock.setAvailable(true)
         await mock.setSessions([])
         await mock.setUseSessionOwnStatus(true)
@@ -76,7 +81,7 @@ struct SessionManagerSoundTests {
     func respondDenyTriggersDenied() async throws {
         let mock = MockAgentAdaptor()
         let soundPlayer = MockSoundPlayer()
-        let manager = SessionManager(adaptors: [mock], soundPlayer: soundPlayer)
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings(), soundPlayer: soundPlayer)
         await mock.setAvailable(true)
         await mock.setSessions([])
         await mock.setUseSessionOwnStatus(true)
@@ -94,7 +99,7 @@ struct SessionManagerSoundTests {
     func respondSelectTriggersApproved() async throws {
         let mock = MockAgentAdaptor()
         let soundPlayer = MockSoundPlayer()
-        let manager = SessionManager(adaptors: [mock], soundPlayer: soundPlayer)
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings(), soundPlayer: soundPlayer)
         await mock.setAvailable(true)
         await mock.setSessions([])
         await mock.setUseSessionOwnStatus(true)
@@ -115,7 +120,7 @@ struct SessionManagerSoundTests {
     @MainActor
     func pollOnceWithoutSoundPlayer() async {
         let mock = MockAgentAdaptor()
-        let manager = SessionManager(adaptors: [mock])
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings())
         await mock.setAvailable(true)
         await mock.setSessions([makeSession()])
         await mock.setUseSessionOwnStatus(true)

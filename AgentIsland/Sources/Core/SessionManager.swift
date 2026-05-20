@@ -12,6 +12,7 @@ final class SessionManager {
     private var pollTask: Task<Void, Never>?
     let pollInterval: TimeInterval
     let retryPolicy: RetryPolicy
+    private let settingsStore: SettingsStore
     private let soundPlayer: (any SoundPlayable)?
     private let eventDetector = SessionEventDetector()
     private var idleTimers: [String: Date] = [:]
@@ -26,12 +27,14 @@ final class SessionManager {
 
     init(
         adaptors: [any AgentAdaptor],
+        settingsStore: SettingsStore,
         pollInterval: TimeInterval = 2.0,
         retryPolicy: RetryPolicy = .standard,
         health: AdaptorHealth = AdaptorHealth(),
         soundPlayer: (any SoundPlayable)? = nil
     ) {
         self.adaptors = adaptors
+        self.settingsStore = settingsStore
         self.pollInterval = pollInterval
         self.retryPolicy = retryPolicy
         self.health = health
@@ -108,7 +111,8 @@ final class SessionManager {
             }
         }
 
-        self.sessions = newSessions
+        let filteredSessions = SessionFilter.apply(to: newSessions, settings: settingsStore)
+        self.sessions = filteredSessions
         self.pendingConfirmations = newConfirmations
 
         let events = eventDetector.detect(

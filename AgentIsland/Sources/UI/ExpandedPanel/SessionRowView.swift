@@ -3,6 +3,7 @@ import SwiftUI
 struct SessionRowView: View {
     let session: AgentSession
     var onTap: (() -> Void)? = nil
+    var onAddToFilter: ((String) -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -39,6 +40,11 @@ struct SessionRowView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .contentShape(Rectangle())
         .onTapGesture { onTap?() }
+        .contextMenu {
+            Button("添加到过滤") {
+                onAddToFilter?(session.title)
+            }
+        }
     }
 
     private var agentTag: some View {

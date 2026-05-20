@@ -29,6 +29,8 @@ struct SettingsRootView: View {
             SoundSettingsView(store: store)
         case .about:
             AboutSettingsView()
+        case .notification:
+            NotificationSettingsView(store: store)
         default:
             PlaceholderSettingsView(section: section)
         }

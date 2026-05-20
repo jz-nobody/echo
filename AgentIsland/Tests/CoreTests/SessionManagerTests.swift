@@ -5,6 +5,11 @@ import Foundation
 @Suite("SessionManager Tests", .serialized)
 struct SessionManagerTests {
 
+    @MainActor
+    private func makeSettings() -> SettingsStore {
+        SettingsStore(defaults: UserDefaults(suiteName: "test-sm-\(UUID())")!)
+    }
+
     private func makeSession(
         id: String = "s1",
         status: SessionStatus = .executing,
@@ -42,7 +47,7 @@ struct SessionManagerTests {
         ])
         await mock.setUseSessionOwnStatus(true)
 
-        let manager = SessionManager(adaptors: [mock])
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings())
         await manager.pollOnce()
 
         #expect(manager.aggregateStatus == .waitingConfirmation)
@@ -59,7 +64,7 @@ struct SessionManagerTests {
         ])
         await mock.setUseSessionOwnStatus(true)
 
-        let manager = SessionManager(adaptors: [mock])
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings())
         await manager.pollOnce()
 
         #expect(manager.activeSessionCount == 1)
@@ -73,7 +78,7 @@ struct SessionManagerTests {
         await mock.setSessions([session])
         await mock.setStatus(.thinking)
 
-        let manager = SessionManager(adaptors: [mock])
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings())
         #expect(manager.sessions.isEmpty)
 
         await manager.pollOnce()
@@ -93,7 +98,7 @@ struct SessionManagerTests {
         let confirmation = makeConfirmation(id: "conf-1")
         await mock.setConfirmations([confirmation])
 
-        let manager = SessionManager(adaptors: [mock])
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings())
         await manager.pollOnce()
 
         #expect(manager.pendingConfirmations["task-1"]?.count == 1)
@@ -107,7 +112,7 @@ struct SessionManagerTests {
         await mock.setAvailable(false)
         await mock.setSessions([makeSession()])
 
-        let manager = SessionManager(adaptors: [mock])
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings())
         await manager.pollOnce()
 
         #expect(manager.sessions.isEmpty)
@@ -120,7 +125,7 @@ struct SessionManagerTests {
         await mock.setAvailable(true)
         await mock.setSessions([])
 
-        let manager = SessionManager(adaptors: [mock])
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings())
         let session = makeSession(id: "task-1")
         let confirmation = makeConfirmation()
 
@@ -134,7 +139,7 @@ struct SessionManagerTests {
     @MainActor
     func startPollingSetsFlag() {
         let mock = MockAgentAdaptor()
-        let manager = SessionManager(adaptors: [mock])
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings())
 
         #expect(manager.isPolling == false)
         manager.startPolling()
@@ -146,7 +151,7 @@ struct SessionManagerTests {
     @MainActor
     func stopPollingClearsFlag() {
         let mock = MockAgentAdaptor()
-        let manager = SessionManager(adaptors: [mock])
+        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings())
 
         manager.startPolling()
         manager.stopPolling()

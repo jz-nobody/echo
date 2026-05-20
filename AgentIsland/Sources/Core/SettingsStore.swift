@@ -40,6 +40,10 @@ final class SettingsStore {
     // MARK: - Display > Sub-agent
     var showSubAgentDetails: Bool { didSet { persist() } }
 
+    // MARK: - Notification Filter
+    var enableBuiltInFilters: Bool { didSet { persist() } }
+    var filterKeywords: [String] { didSet { persist() } }
+
     // MARK: - Sound
     var soundEnabled: Bool { didSet { persist() } }
     var soundVolume: Float { didSet { persist() } }
@@ -72,6 +76,9 @@ final class SettingsStore {
         agentTeamAutoExpand = false
         idleCleanupInterval = 7200
         disableClickToJump = false
+        // Notification Filter
+        enableBuiltInFilters = true
+        filterKeywords = []
         // Display
         displayMode = .detailed
         monitorSelection = 0
@@ -109,6 +116,8 @@ final class SettingsStore {
         agentTeamAutoExpand = false
         idleCleanupInterval = 7200
         disableClickToJump = false
+        enableBuiltInFilters = true
+        filterKeywords = []
         displayMode = .detailed
         monitorSelection = 0
         panelFontSize = 11
@@ -169,6 +178,8 @@ final class SettingsStore {
         d.set(soundError, forKey: k("soundError"))
         d.set(soundReconnected, forKey: k("soundReconnected"))
         d.set(soundIdleReminder, forKey: k("soundIdleReminder"))
+        d.set(enableBuiltInFilters, forKey: k("enableBuiltInFilters"))
+        d.set(filterKeywords, forKey: k("filterKeywords"))
     }
 
     private func load() {
@@ -207,5 +218,7 @@ final class SettingsStore {
         if let v = d.string(forKey: k("soundError")) { soundError = v }
         if let v = d.string(forKey: k("soundReconnected")) { soundReconnected = v }
         if let v = d.string(forKey: k("soundIdleReminder")) { soundIdleReminder = v }
+        if d.object(forKey: k("enableBuiltInFilters")) != nil { enableBuiltInFilters = d.bool(forKey: k("enableBuiltInFilters")) }
+        if let arr = d.stringArray(forKey: k("filterKeywords")) { filterKeywords = arr }
     }
 }

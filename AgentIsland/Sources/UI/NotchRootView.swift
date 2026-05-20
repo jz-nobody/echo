@@ -26,6 +26,10 @@ struct NotchRootView: View {
                             panelState.collapse()
                         }
                     },
+                    onAddToFilter: { keyword in
+                        guard !panelState.settingsStore.filterKeywords.contains(keyword) else { return }
+                        panelState.settingsStore.filterKeywords.append(keyword)
+                    },
                     onRespond: { item, response in
                         Task {
                             try? await sessionManager.respond(

@@ -7,6 +7,11 @@ struct E2EFlowTests {
 
     private let baseURL = URL(string: "http://127.0.0.1:52345")!
 
+    @MainActor
+    private func makeSettings() -> SettingsStore {
+        SettingsStore(defaults: UserDefaults(suiteName: "test-e2e-\(UUID())")!)
+    }
+
     @Test("real MCP discovery returns sessions")
     @MainActor
     func realMCPDiscovery() async throws {
@@ -25,7 +30,7 @@ struct E2EFlowTests {
     func fullPollCycle() async throws {
         let client = MCPClient(baseURL: baseURL)
         let adaptor = QoderWorkAdaptor(client: client)
-        let manager = SessionManager(adaptors: [adaptor])
+        let manager = SessionManager(adaptors: [adaptor], settingsStore: makeSettings())
 
         await manager.pollOnce()
 
@@ -38,7 +43,7 @@ struct E2EFlowTests {
     func respondFlowCompletes() async throws {
         let client = MCPClient(baseURL: baseURL)
         let adaptor = QoderWorkAdaptor(client: client)
-        let manager = SessionManager(adaptors: [adaptor])
+        let manager = SessionManager(adaptors: [adaptor], settingsStore: makeSettings())
 
         await manager.pollOnce()
 
@@ -61,6 +66,7 @@ struct E2EFlowTests {
         let retryPolicy = RetryPolicy(maxAttempts: 1, baseDelay: 0.1, multiplier: 1.0)
         let manager = SessionManager(
             adaptors: [adaptor],
+            settingsStore: makeSettings(),
             retryPolicy: retryPolicy,
             health: health
         )
