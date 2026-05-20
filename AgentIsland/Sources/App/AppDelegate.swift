@@ -4,6 +4,7 @@ import Foundation
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: WindowController?
     private var sessionManager: SessionManager?
+    private var settingsStore: SettingsStore?
     private var claudeCodeAdaptor: ClaudeCodeAdaptor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -30,11 +31,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSLog("[AgentIsland] HookInstaller failed: \(error)")
         }
 
+        let settings = SettingsStore()
+        self.settingsStore = settings
+
         let manager = SessionManager(adaptors: adaptors)
         manager.startPolling()
 
         self.sessionManager = manager
-        windowController = WindowController(sessionManager: manager)
+        windowController = WindowController(sessionManager: manager, settingsStore: settings)
         windowController?.showCompactBar()
     }
 

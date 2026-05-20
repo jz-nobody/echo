@@ -7,15 +7,15 @@ final class PanelState {
     var confirmationsActive = false
     private var expandTimer: Timer?
 
-    let hoverDelay: TimeInterval
+    let settingsStore: SettingsStore
 
-    init(hoverDelay: TimeInterval = AnimationConstants.hoverDelay) {
-        self.hoverDelay = hoverDelay
+    init(settingsStore: SettingsStore) {
+        self.settingsStore = settingsStore
     }
 
     func mouseEntered() {
         expandTimer?.invalidate()
-        expandTimer = Timer.scheduledTimer(withTimeInterval: hoverDelay, repeats: false) { [weak self] _ in
+        expandTimer = Timer.scheduledTimer(withTimeInterval: settingsStore.hoverDelay, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 self?.expand()
             }
