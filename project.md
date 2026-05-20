@@ -23,7 +23,7 @@ Phase 1-2 全部完成（Steps 0-12, 95 tests, E2E 验证通过）。Phase 3 设
 | 架构设计 | ✅ 完成 | 2026-05-20 | Pure Swift 技术栈锁定 |
 | Phase 1: 壳子 + 单 Agent | ✅ 完成 | 2026-05-20 | Step 0-8 全部完成，64 tests |
 | Phase 2: 多 Agent 接入 | ✅ 完成 | 2026-05-20 | Claude Code 适配器完成，E2E 验证通过，95 tests |
-| Phase 3: 体验完善 | 🔄 进行中 | - | Step 13-16 设置 + 声音 + 智能抑制完成，139 tests |
+| Phase 3: 体验完善 | 🔄 进行中 | - | Step 13-17 设置 + 声音 + 智能抑制 + 点击跳转完成，149 tests |
 | Phase 4: 稳定化 | 🔲 未开始 | - | 目标：测试覆盖 + 性能优化 |
 
 ---
