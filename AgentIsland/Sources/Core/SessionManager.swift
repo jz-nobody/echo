@@ -11,6 +11,7 @@ final class SessionManager {
     private let adaptors: [any AgentAdaptor]
     private var pollTask: Task<Void, Never>?
     let pollInterval: TimeInterval
+    let idlePollInterval: TimeInterval
     let retryPolicy: RetryPolicy
     private let settingsStore: SettingsStore
     private let soundPlayer: (any SoundPlayable)?
@@ -29,6 +30,7 @@ final class SessionManager {
         adaptors: [any AgentAdaptor],
         settingsStore: SettingsStore,
         pollInterval: TimeInterval = 2.0,
+        idlePollInterval: TimeInterval = 10.0,
         retryPolicy: RetryPolicy = .standard,
         health: AdaptorHealth = AdaptorHealth(),
         soundPlayer: (any SoundPlayable)? = nil
@@ -36,6 +38,7 @@ final class SessionManager {
         self.adaptors = adaptors
         self.settingsStore = settingsStore
         self.pollInterval = pollInterval
+        self.idlePollInterval = idlePollInterval
         self.retryPolicy = retryPolicy
         self.health = health
         self.soundPlayer = soundPlayer
@@ -47,7 +50,10 @@ final class SessionManager {
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.pollOnce()
-                try? await Task.sleep(for: .seconds(self?.pollInterval ?? 2))
+                let interval = (self?.activeSessionCount ?? 0) > 0
+                    ? (self?.pollInterval ?? 2)
+                    : (self?.idlePollInterval ?? 10)
+                try? await Task.sleep(for: .seconds(interval))
             }
         }
     }

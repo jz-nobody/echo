@@ -13,6 +13,7 @@ final class WindowController: NSObject {
     private var hostingView: NSHostingView<AnyView>?
     private var notchInfo: NotchInfo?
     private var fullscreenObserver: NSObjectProtocol?
+    private var displayChangeObserver: NSObjectProtocol?
     private lazy var settingsWindowController = SettingsWindowController(settingsStore: settingsStore)
 
     private let barWidth: CGFloat = 200
@@ -31,49 +32,32 @@ final class WindowController: NSObject {
         let info = NotchDetector.detect()
         self.notchInfo = info
         let panel = createPanel(notchInfo: info)
-
         let rootView = NotchRootView(
-            panelState: panelState,
-            sessionManager: sessionManager,
+            panelState: panelState, sessionManager: sessionManager,
             confirmationQueue: confirmationQueue,
-            frontmostAppMonitor: frontmostAppMonitor,
-            windowActivator: windowActivator
+            frontmostAppMonitor: frontmostAppMonitor, windowActivator: windowActivator
         )
         let hosting = NSHostingView(rootView: AnyView(rootView))
         hosting.frame = NSRect(x: 0, y: 0, width: barWidth, height: barHeight)
         panel.contentView = hosting
-
-        self.hostingView = hosting
-        self.panel = panel
+        self.hostingView = hosting; self.panel = panel
         panel.orderFrontRegardless()
-
-        setupTracking(panel: panel)
-        setupKeyMonitor()
-        setupFullscreenObserver()
+        setupTracking(panel: panel); setupKeyMonitor()
+        setupFullscreenObserver(); setupDisplayChangeObserver()
     }
 
     private func createPanel(notchInfo: NotchInfo) -> NSPanel {
-        let origin = NSPoint(x: notchInfo.barOriginX, y: notchInfo.barOriginY)
-        let size = NSSize(width: barWidth, height: barHeight)
-
         let panel = NSPanel(
-            contentRect: NSRect(origin: origin, size: size),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
+            contentRect: NSRect(origin: NSPoint(x: notchInfo.barOriginX, y: notchInfo.barOriginY),
+                                size: NSSize(width: barWidth, height: barHeight)),
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
-
         panel.level = .statusBar + 1
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.isMovable = false
-        panel.hidesOnDeactivate = false
-        panel.ignoresMouseEvents = false
-        panel.isFloatingPanel = true
+        panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = false
+        panel.isMovable = false; panel.hidesOnDeactivate = false
+        panel.ignoresMouseEvents = false; panel.isFloatingPanel = true
         panel.acceptsMouseMovedEvents = true
-
         return panel
     }
 
@@ -92,7 +76,6 @@ final class WindowController: NSObject {
         trackingView.autoresizingMask = [.width, .height]
         panel.contentView?.addSubview(trackingView)
     }
-
     private func setupKeyMonitor() {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
@@ -181,6 +164,23 @@ final class WindowController: NSObject {
         }
     }
 
+    private func setupDisplayChangeObserver() {
+        displayChangeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let panel = self.panel else { return }
+                let info = NotchDetector.detect()
+                self.notchInfo = info
+                let origin = NSPoint(x: info.barOriginX, y: info.barOriginY)
+                panel.setFrameOrigin(origin)
+                self.updatePanelFrame()
+            }
+        }
+    }
+
     private func updatePanelFrame() {
         guard let panel, let notchInfo, let hostingView else { return }
         let targetHeight = panelState.isExpanded ? (barHeight + settingsStore.maxPanelHeight) : barHeight
@@ -198,4 +198,3 @@ final class WindowController: NSObject {
         hostingView.frame = NSRect(x: 0, y: 0, width: targetWidth, height: targetHeight)
     }
 }
-
