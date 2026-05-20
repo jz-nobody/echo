@@ -107,12 +107,13 @@ Note: the `permissionMode` is at the TOP level of the JSONL line object, NOT ins
 
 #### 3.2 Detect conversation compression
 
-Conversation compression in Claude Code produces a message with `type: "summary"` or the user sends `/compact`. Detection strategy:
+Conversation compression in Claude Code produces a system message with `subtype: "compact_boundary"`. The JSONL line looks like:
 
-- In tail parsing, look for any line where `type` is `"summary"` — this indicates the conversation was compacted.
-- Alternatively, look for assistant messages that contain compaction markers.
+```json
+{"type": "system", "subtype": "compact_boundary", "content": "Conversation compacted", ...}
+```
 
-Simple approach: scan tail lines for `type == "summary"`. If found, set `isConversationCompressed = true`.
+Detection: In `readTailData()`, scan for lines where `type == "system"` AND `subtype == "compact_boundary"`. If found, set `isConversationCompressed = true`.
 
 #### 3.3 TailData update
 
