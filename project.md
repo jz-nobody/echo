@@ -4,9 +4,9 @@
 
 ---
 
-## 当前阶段：Phase 2 — 多 Agent 接入
+## 当前阶段：Phase 3 — 体验完善
 
-Phase 1 全部完成。Phase 2 Claude Code 适配器核心实现完成，待实际端到端测试验证。
+Phase 1-2 全部完成（Steps 0-12, 95 tests, E2E 验证通过）。Phase 3 设置基础设施已完成（Steps 13-14, 106 tests）。
 
 ---
 
@@ -22,8 +22,8 @@ Phase 1 全部完成。Phase 2 Claude Code 适配器核心实现完成，待实�
 | 交互视觉方案 | ✅ 完成 | 2026-05-20 | 1:1 参考 VibeIsland |
 | 架构设计 | ✅ 完成 | 2026-05-20 | Pure Swift 技术栈锁定 |
 | Phase 1: 壳子 + 单 Agent | ✅ 完成 | 2026-05-20 | Step 0-8 全部完成，64 tests |
-| Phase 2: 多 Agent 接入 | 🔄 进行中 | - | Claude Code 适配器完成，91 tests，Codex 待安装后开发 |
-| Phase 3: 体验完善 | 🔲 未开始 | - | 目标：设置/声音/快捷键/过滤 |
+| Phase 2: 多 Agent 接入 | ✅ 完成 | 2026-05-20 | Claude Code 适配器完成，E2E 验证通过，95 tests |
+| Phase 3: 体验完善 | 🔄 进行中 | - | Step 13-14 设置基础完成，106 tests |
 | Phase 4: 稳定化 | 🔲 未开始 | - | 目标：测试覆盖 + 性能优化 |
 
 ---
