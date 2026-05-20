@@ -164,6 +164,7 @@ enum ConversationLogParser {
 
         let subagents = agentCalls.map { (id, info) in
             SubagentInfo(
+                id: id,
                 description: info.description,
                 agentType: info.agentType,
                 isComplete: completedToolIds.contains(id)

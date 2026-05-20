@@ -277,6 +277,28 @@ struct ConversationLogParserTests {
         #expect(snap.isConversationCompressed == false)
     }
 
+    @Test("snapshot subagents include tool_use id")
+    func snapshotSubagentIds() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Go"}]}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_abc123","name":"Agent","input":{"description":"Search code","subagent_type":"Explore"}}]}}"#,
+            #"{"type":"tool_result","tool_use_id":"toolu_abc123","content":"Done"}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_def456","name":"Agent","input":{"description":"Review changes","subagent_type":"code-reviewer"}}]}}"#
+        ])
+
+        let snap = ConversationLogParser.snapshot(atPath: path)
+
+        #expect(snap.subagents.count == 2)
+        let search = snap.subagents.first { $0.id == "toolu_abc123" }
+        #expect(search != nil)
+        #expect(search?.description == "Search code")
+        #expect(search?.isComplete == true)
+        let review = snap.subagents.first { $0.id == "toolu_def456" }
+        #expect(review != nil)
+        #expect(review?.description == "Review changes")
+        #expect(review?.isComplete == false)
+    }
+
     @Test("snapshot ignores invalid todo items gracefully")
     func snapshotInvalidTodos() throws {
         let path = try writeTempJSONL([
