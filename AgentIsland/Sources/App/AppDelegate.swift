@@ -39,7 +39,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.startPolling()
 
         self.sessionManager = manager
-        windowController = WindowController(sessionManager: manager, settingsStore: settings)
+        let frontmostAppMonitor = FrontmostAppMonitor()
+        windowController = WindowController(
+            sessionManager: manager,
+            settingsStore: settings,
+            frontmostAppMonitor: frontmostAppMonitor
+        )
         windowController?.showCompactBar()
     }
 

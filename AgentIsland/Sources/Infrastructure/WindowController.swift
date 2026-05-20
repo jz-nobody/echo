@@ -7,17 +7,20 @@ final class WindowController: NSObject {
     private let panelState: PanelState
     private let sessionManager: SessionManager
     private let settingsStore: SettingsStore
+    private let frontmostAppMonitor: FrontmostAppMonitor
     private let confirmationQueue = ConfirmationQueue()
     private var hostingView: NSHostingView<AnyView>?
     private var notchInfo: NotchInfo?
+    private var fullscreenObserver: NSObjectProtocol?
     private lazy var settingsWindowController = SettingsWindowController(settingsStore: settingsStore)
 
     private let barWidth: CGFloat = 200
     private let barHeight: CGFloat = 32
 
-    init(sessionManager: SessionManager, settingsStore: SettingsStore) {
+    init(sessionManager: SessionManager, settingsStore: SettingsStore, frontmostAppMonitor: FrontmostAppMonitor) {
         self.sessionManager = sessionManager
         self.settingsStore = settingsStore
+        self.frontmostAppMonitor = frontmostAppMonitor
         self.panelState = PanelState(settingsStore: settingsStore)
         super.init()
     }
@@ -30,7 +33,8 @@ final class WindowController: NSObject {
         let rootView = NotchRootView(
             panelState: panelState,
             sessionManager: sessionManager,
-            confirmationQueue: confirmationQueue
+            confirmationQueue: confirmationQueue,
+            frontmostAppMonitor: frontmostAppMonitor
         )
         let hosting = NSHostingView(rootView: AnyView(rootView))
         hosting.frame = NSRect(x: 0, y: 0, width: barWidth, height: barHeight)
@@ -42,6 +46,7 @@ final class WindowController: NSObject {
 
         setupTracking(panel: panel)
         setupKeyMonitor()
+        setupFullscreenObserver()
     }
 
     private func createPanel(notchInfo: NotchInfo) -> NSPanel {
@@ -149,6 +154,21 @@ final class WindowController: NSObject {
                 panelState.confirmationsActive = false
                 panelState.collapse()
                 updatePanelFrame()
+            }
+        }
+    }
+
+    private func setupFullscreenObserver() {
+        fullscreenObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let panel = self.panel else { return }
+                let shouldHide = self.settingsStore.hideInFullscreen
+                    && self.frontmostAppMonitor.isFullscreenAppActive()
+                panel.setIsVisible(!shouldHide)
             }
         }
     }

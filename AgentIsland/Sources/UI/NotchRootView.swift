@@ -4,6 +4,7 @@ struct NotchRootView: View {
     let panelState: PanelState
     var sessionManager: SessionManager
     let confirmationQueue: ConfirmationQueue
+    let frontmostAppMonitor: FrontmostAppMonitor
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,11 +43,29 @@ struct NotchRootView: View {
                 sessions: sessionManager.sessions
             )
             if !confirmationQueue.isEmpty {
-                panelState.autoExpand()
+                if !shouldSuppressAutoExpand() {
+                    panelState.autoExpand()
+                }
             } else {
                 panelState.confirmationsActive = false
             }
         }
+        .onChange(of: frontmostAppMonitor.frontmostAppPID) {
+            if !confirmationQueue.isEmpty && !panelState.isExpanded {
+                if !shouldSuppressAutoExpand() {
+                    panelState.autoExpand()
+                }
+            }
+        }
+    }
+
+    private func shouldSuppressAutoExpand() -> Bool {
+        SuppressionEvaluator.shouldSuppress(
+            settings: panelState.settingsStore,
+            monitor: frontmostAppMonitor,
+            sessions: sessionManager.sessions,
+            confirmations: sessionManager.pendingConfirmations
+        )
     }
 
     private var elapsedTimeText: String? {
