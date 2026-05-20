@@ -25,7 +25,7 @@ struct SettingsStoreTests {
         #expect(store.hideWhenNoActiveSessions == false)
         #expect(store.autoCollapseOnMouseExit == true)
         #expect(store.autoReminderDuration == 5.0)
-        #expect(store.dismissOnClickOutside == false)
+        #expect(store.dismissOnClickOutside == true)
         #expect(store.agentTeamAutoExpand == false)
         #expect(store.idleCleanupInterval == 7200)
         #expect(store.disableClickToJump == false)
@@ -33,8 +33,8 @@ struct SettingsStoreTests {
         #expect(store.monitorSelection == 0)
         #expect(store.panelFontSize == 11)
         #expect(store.completionCardHeight == 90)
-        #expect(store.maxPanelHeight == 560)
-        #expect(store.maxPanelWidth == 640)
+        #expect(store.maxPanelHeight == 550)
+        #expect(store.maxPanelWidth == 680)
         #expect(store.notchWidthOffset == 0)
         #expect(store.notchHeightOffset == 0)
         #expect(store.showSubAgentDetails == false)
@@ -84,7 +84,7 @@ struct SettingsStoreTests {
         #expect(store.hoverDelay == 0.15)
         #expect(store.soundEnabled == true)
         #expect(store.displayMode == .detailed)
-        #expect(store.maxPanelHeight == 560)
+        #expect(store.maxPanelHeight == 550)
     }
 
     @MainActor

@@ -57,11 +57,11 @@ final class SettingsStore {
         self.defaults = defaults
         launchAtLogin = true; hoverToExpand = true; hoverDelay = 0.15
         smartSuppression = true; hideInFullscreen = true; hideWhenNoActiveSessions = false
-        autoCollapseOnMouseExit = true; autoReminderDuration = 5.0; dismissOnClickOutside = false
+        autoCollapseOnMouseExit = true; autoReminderDuration = 5.0; dismissOnClickOutside = true
         agentTeamAutoExpand = false; idleCleanupInterval = 7200; disableClickToJump = false
         enableBuiltInFilters = true; filterKeywords = []
         displayMode = .detailed; monitorSelection = 0; panelFontSize = 11
-        completionCardHeight = 90; maxPanelHeight = 560; maxPanelWidth = 640
+        completionCardHeight = 90; maxPanelHeight = 550; maxPanelWidth = 680
         notchWidthOffset = 0; notchHeightOffset = 0; showSubAgentDetails = false
         soundEnabled = true; soundVolume = 0.3
         soundSessionStart = "default"; soundSessionEnd = "default"
@@ -69,6 +69,7 @@ final class SettingsStore {
         soundConfirmationDenied = "default"; soundError = "default"
         soundReconnected = "default"; soundIdleReminder = "default"
         load()
+        migratePanelDimensions()
     }
 
     func resetToDefaults() {
@@ -76,11 +77,11 @@ final class SettingsStore {
         defer { isLoading = false; persist() }
         launchAtLogin = true; hoverToExpand = true; hoverDelay = 0.15
         smartSuppression = true; hideInFullscreen = true; hideWhenNoActiveSessions = false
-        autoCollapseOnMouseExit = true; autoReminderDuration = 5.0; dismissOnClickOutside = false
+        autoCollapseOnMouseExit = true; autoReminderDuration = 5.0; dismissOnClickOutside = true
         agentTeamAutoExpand = false; idleCleanupInterval = 7200; disableClickToJump = false
         enableBuiltInFilters = true; filterKeywords = []
         displayMode = .detailed; monitorSelection = 0; panelFontSize = 11
-        completionCardHeight = 90; maxPanelHeight = 560; maxPanelWidth = 640
+        completionCardHeight = 90; maxPanelHeight = 550; maxPanelWidth = 680
         notchWidthOffset = 0; notchHeightOffset = 0; showSubAgentDetails = false
         soundEnabled = true; soundVolume = 0.3
         soundSessionStart = "default"; soundSessionEnd = "default"
@@ -168,5 +169,15 @@ final class SettingsStore {
         if let v = d.string(forKey: k("soundIdleReminder")) { soundIdleReminder = v }
         if d.object(forKey: k("enableBuiltInFilters")) != nil { enableBuiltInFilters = d.bool(forKey: k("enableBuiltInFilters")) }
         if let arr = d.stringArray(forKey: k("filterKeywords")) { filterKeywords = arr }
+    }
+
+    private func migratePanelDimensions() {
+        let migrationKey = key("panelDimensionMigration")
+        let version = defaults.integer(forKey: migrationKey)
+        if version < 2 {
+            maxPanelWidth = 680
+            maxPanelHeight = 550
+            defaults.set(2, forKey: migrationKey)
+        }
     }
 }
