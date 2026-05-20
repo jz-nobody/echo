@@ -43,6 +43,8 @@ final class FrontmostAppMonitor: FrontmostAppProviding {
         for info in windowList {
             guard let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t,
                   ownerPID != myPID,
+                  let layer = info[kCGWindowLayer as String] as? Int,
+                  layer == 0,
                   let boundsDict = info[kCGWindowBounds as String] as? [String: Any],
                   let width = boundsDict["Width"] as? CGFloat,
                   let height = boundsDict["Height"] as? CGFloat else { continue }
