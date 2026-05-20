@@ -17,7 +17,7 @@ enum ConversationLogParser {
     }
 
     private static let headReadSize: UInt64 = 8192
-    private static let tailReadSize: UInt64 = 65536
+    private static let tailReadSize: UInt64 = 262_144
     private static let maxTextLength = 200
 
     // MARK: - Public API
@@ -220,9 +220,75 @@ enum ConversationLogParser {
 
     // MARK: - Helpers
 
-    private static func jsonlPath(cwd: String, sessionId: String) -> String {
+    static func jsonlPath(cwd: String, sessionId: String) -> String {
         let projectDir = cwd.replacingOccurrences(of: "/", with: "-")
         return NSHomeDirectory() + "/.claude/projects/" + projectDir + "/" + sessionId + ".jsonl"
+    }
+
+    static func fileSize(atPath path: String) -> UInt64 {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let size = attrs[.size] as? UInt64 else { return 0 }
+        return size
+    }
+
+    static func scanAllSubagents(atPath path: String, fromOffset: UInt64 = 0) -> [SubagentInfo] {
+        guard let fileHandle = FileHandle(forReadingAtPath: path) else { return [] }
+        defer { fileHandle.closeFile() }
+
+        let fileSize = fileHandle.seekToEndOfFile()
+        guard fileSize > fromOffset else { return [] }
+
+        fileHandle.seek(toFileOffset: fromOffset)
+        let data = fileHandle.readDataToEndOfFile()
+        guard let text = String(data: data, encoding: .utf8) else { return [] }
+
+        let lines = text.components(separatedBy: "\n")
+
+        var agentCalls: [String: (description: String, agentType: String)] = [:]
+        var completedToolIds: Set<String> = []
+
+        for line in lines {
+            guard !line.isEmpty else { continue }
+            guard line.contains("\"Agent\"") || line.contains("\"tool_result\"") else { continue }
+
+            guard let lineData = line.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                  let type = obj["type"] as? String else { continue }
+
+            if type == "assistant" {
+                guard let message = obj["message"] as? [String: Any],
+                      let content = message["content"] as? [[String: Any]] else { continue }
+                for item in content {
+                    guard item["type"] as? String == "tool_use",
+                          item["name"] as? String == "Agent",
+                          let id = item["id"] as? String,
+                          let input = item["input"] as? [String: Any] else { continue }
+                    let desc = input["description"] as? String ?? "Agent"
+                    let agentType = input["subagent_type"] as? String ?? "general"
+                    if agentCalls[id] == nil {
+                        agentCalls[id] = (description: desc, agentType: agentType)
+                    }
+                }
+            } else if type == "tool_result" {
+                if let toolUseId = obj["tool_use_id"] as? String {
+                    completedToolIds.insert(toolUseId)
+                }
+            }
+        }
+
+        return agentCalls.map { (id, info) in
+            SubagentInfo(
+                id: id,
+                description: info.description,
+                agentType: info.agentType,
+                isComplete: completedToolIds.contains(id)
+            )
+        }
+    }
+
+    static func scanAllSubagents(cwd: String, sessionId: String, fromOffset: UInt64 = 0) -> [SubagentInfo] {
+        let path = jsonlPath(cwd: cwd, sessionId: sessionId)
+        return scanAllSubagents(atPath: path, fromOffset: fromOffset)
     }
 
     static func extractText(from obj: [String: Any]) -> String? {

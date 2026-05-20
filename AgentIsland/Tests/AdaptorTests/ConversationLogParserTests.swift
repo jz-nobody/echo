@@ -311,4 +311,72 @@ struct ConversationLogParserTests {
         #expect(snap.todos.count == 1)
         #expect(snap.todos[0].content == "Valid")
     }
+
+    // MARK: - scanAllSubagents tests
+
+    @Test("scanAllSubagents finds all Agent tool_use calls across entire file")
+    func scanAllSubagentsFullScan() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Start"}]}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"ag1","name":"Agent","input":{"description":"Explore UI","subagent_type":"Explore"}}]}}"#,
+            #"{"type":"tool_result","tool_use_id":"ag1","content":"Found files"}"#,
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Continue"}]}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"ag2","name":"Agent","input":{"description":"Review code","subagent_type":"code-reviewer"}}]}}"#,
+            #"{"type":"tool_result","tool_use_id":"ag2","content":"Looks good"}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"ag3","name":"Agent","input":{"description":"Run tests","subagent_type":"general"}}]}}"#
+        ])
+
+        let subagents = ConversationLogParser.scanAllSubagents(atPath: path)
+
+        #expect(subagents.count == 3)
+        let ag1 = subagents.first { $0.id == "ag1" }
+        #expect(ag1?.description == "Explore UI")
+        #expect(ag1?.agentType == "Explore")
+        #expect(ag1?.isComplete == true)
+        let ag2 = subagents.first { $0.id == "ag2" }
+        #expect(ag2?.isComplete == true)
+        let ag3 = subagents.first { $0.id == "ag3" }
+        #expect(ag3?.isComplete == false)
+    }
+
+    @Test("scanAllSubagents with fromOffset only scans new bytes")
+    func scanAllSubagentsIncremental() throws {
+        let lines = [
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"ag1","name":"Agent","input":{"description":"First","subagent_type":"Explore"}}]}}"#,
+            #"{"type":"tool_result","tool_use_id":"ag1","content":"Done"}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"ag2","name":"Agent","input":{"description":"Second","subagent_type":"Plan"}}]}}"#
+        ]
+        let path = try writeTempJSONL(lines)
+
+        let firstLineBytes = UInt64((lines[0] + "\n").utf8.count)
+        let secondLineBytes = UInt64((lines[1] + "\n").utf8.count)
+        let offset = firstLineBytes + secondLineBytes
+
+        let subagents = ConversationLogParser.scanAllSubagents(atPath: path, fromOffset: offset)
+
+        #expect(subagents.count == 1)
+        #expect(subagents[0].id == "ag2")
+        #expect(subagents[0].description == "Second")
+    }
+
+    @Test("fileSize returns correct byte count")
+    func fileSizeHelper() throws {
+        let content = "hello\nworld\n"
+        let path = try writeTempJSONL(["hello", "world"])
+        let size = ConversationLogParser.fileSize(atPath: path)
+        #expect(size > 0)
+        #expect(size == UInt64(content.utf8.count))
+    }
+
+    @Test("scanAllSubagents returns empty for nonexistent file")
+    func scanAllSubagentsNonexistent() {
+        let result = ConversationLogParser.scanAllSubagents(atPath: "/tmp/nonexistent-\(UUID()).jsonl")
+        #expect(result.isEmpty)
+    }
+
+    @Test("fileSize returns 0 for nonexistent file")
+    func fileSizeNonexistent() {
+        let size = ConversationLogParser.fileSize(atPath: "/tmp/nonexistent-\(UUID()).jsonl")
+        #expect(size == 0)
+    }
 }
