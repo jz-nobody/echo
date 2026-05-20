@@ -1,0 +1,40 @@
+#!/bin/zsh
+# Agent Island Bridge — Claude Code PermissionRequest hook
+# Reads hook JSON from stdin, forwards to Agent Island via Unix socket,
+# waits for decision, prints response to stdout.
+# Falls back to {"decision":"ask"} on any error (graceful degradation).
+
+set -e
+
+SOCK="/tmp/agent-island.sock"
+FALLBACK='{"decision":"ask"}'
+
+# Check if Agent Island is listening
+if [ ! -S "$SOCK" ]; then
+  echo "$FALLBACK"
+  exit 0
+fi
+
+# Read all stdin
+INPUT=$(cat)
+
+# Forward to socket and read response
+# Use socat if available, fall back to nc
+if command -v socat >/dev/null 2>&1; then
+  RESPONSE=$(echo "$INPUT" | socat -t 30 - UNIX-CONNECT:"$SOCK" 2>/dev/null) || {
+    echo "$FALLBACK"
+    exit 0
+  }
+else
+  RESPONSE=$(echo "$INPUT" | nc -U -w 30 "$SOCK" 2>/dev/null) || {
+    echo "$FALLBACK"
+    exit 0
+  }
+fi
+
+# Output response (or fallback if empty)
+if [ -n "$RESPONSE" ]; then
+  echo "$RESPONSE"
+else
+  echo "$FALLBACK"
+fi

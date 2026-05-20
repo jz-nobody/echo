@@ -23,6 +23,13 @@ struct SessionRowView: View {
 
             Spacer()
 
+            if let terminal = session.terminalInfo {
+                Text(terminalLabel(terminal))
+                    .font(.system(size: 10))
+                    .foregroundStyle(DesignTokens.textSecondary)
+                    .padding(.trailing, 4)
+            }
+
             agentTag
         }
         .padding(.vertical, 6)
@@ -54,6 +61,14 @@ struct SessionRowView: View {
         case .qoderWork: DesignTokens.tagQoderWork
         case .claudeCode: DesignTokens.tagClaude
         case .codex: DesignTokens.tagCodex
+        }
+    }
+
+    private func terminalLabel(_ info: TerminalInfo) -> String {
+        switch info.appName {
+        case "claude-vscode": "VS Code"
+        case "cli": "Terminal"
+        default: info.appName
         }
     }
 }

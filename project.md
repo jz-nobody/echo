@@ -4,9 +4,9 @@
 
 ---
 
-## 当前阶段：Phase 1 — 壳子 + 单 Agent (QoderWork)
+## 当前阶段：Phase 2 — 多 Agent 接入
 
-项目已进入**开发阶段**。Step 0（脚手架）和 Step 1（刘海区窗口定位）已完成，正在推进 Phase 1。
+Phase 1 全部完成。Phase 2 Claude Code 适配器核心实现完成，待实际端到端测试验证。
 
 ---
 
@@ -22,7 +22,7 @@
 | 交互视觉方案 | ✅ 完成 | 2026-05-20 | 1:1 参考 VibeIsland |
 | 架构设计 | ✅ 完成 | 2026-05-20 | Pure Swift 技术栈锁定 |
 | Phase 1: 壳子 + 单 Agent | ✅ 完成 | 2026-05-20 | Step 0-8 全部完成，64 tests |
-| Phase 2: 多 Agent 接入 | 🔲 未开始 | - | 目标：Claude Code + Codex 终端 hook |
+| Phase 2: 多 Agent 接入 | 🔄 进行中 | - | Claude Code 适配器完成，91 tests，Codex 待安装后开发 |
 | Phase 3: 体验完善 | 🔲 未开始 | - | 目标：设置/声音/快捷键/过滤 |
 | Phase 4: 稳定化 | 🔲 未开始 | - | 目标：测试覆盖 + 性能优化 |
 
@@ -30,11 +30,11 @@
 
 ## 当前阻塞项
 
-### 1. Claude Code 日志格式需实际验证
-- **描述**：我们推测 Claude Code 在 `~/.claude/` 下产生 JSONL 格式的会话日志，但具体路径和格式需要在安装 Claude Code 后实际验证
-- **影响**：ClaudeCodeAdaptor 的解析器设计可能需要调整
-- **解决方案**：Phase 2 开始时先做日志格式逆向分析
-- **优先级**：中（不影响 Phase 1）
+### 1. Claude Code 日志格式 ✅ 已验证
+- **描述**：已验证 Claude Code 日志系统
+- **结果**：Session 状态文件在 `~/.claude/sessions/<pid>.json`，会话 JSONL 在 `~/.claude/projects/<path>/<sessionId>.jsonl`，审计日志在 `~/.claude/audit/audit.jsonl`
+- **方案**：通过 PermissionRequest hook + Unix socket IPC 实现权限拦截，不解析 JSONL（太复杂）
+- **状态**：已解决
 
 ### 2. Codex 日志格式未知
 - **描述**：Codex CLI 的本地日志路径和格式完全未知
