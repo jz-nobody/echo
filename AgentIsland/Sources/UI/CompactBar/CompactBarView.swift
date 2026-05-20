@@ -41,6 +41,18 @@ struct CompactBarView: View {
                 style: .continuous
             )
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(compactBarAccessibilityLabel)
+        .accessibilityHint("Hover to expand agent panel")
+    }
+    private var compactBarAccessibilityLabel: String {
+        var parts: [String] = ["Agent Island"]
+        parts.append(isOffline ? "Offline" : status.displayText)
+        if sessionCount > 0 {
+            parts.append("\(sessionCount) session\(sessionCount == 1 ? "" : "s")")
+        }
+        if let time = elapsedTime { parts.append(time) }
+        return parts.joined(separator: ", ")
     }
 }
 

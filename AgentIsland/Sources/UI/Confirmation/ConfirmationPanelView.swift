@@ -43,5 +43,6 @@ struct ConfirmationPanelView: View {
         Text("\(queue.currentIndex + 1) of \(queue.count)")
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(DesignTokens.textSecondary)
+            .accessibilityLabel("Confirmation \(queue.currentIndex + 1) of \(queue.count)")
     }
 }

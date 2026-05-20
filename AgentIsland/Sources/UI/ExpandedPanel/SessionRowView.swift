@@ -45,6 +45,10 @@ struct SessionRowView: View {
                 onAddToFilter?(session.title)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(sessionAccessibilityLabel)
+        .accessibilityHint(onTap != nil ? "Double tap to jump to terminal" : "")
+        .accessibilityAddTraits(.isButton)
     }
 
     private var agentTag: some View {
@@ -71,6 +75,13 @@ struct SessionRowView: View {
         case .claudeCode: DesignTokens.tagClaude
         case .codex: DesignTokens.tagCodex
         }
+    }
+
+    private var sessionAccessibilityLabel: String {
+        var parts = ["\(session.title)", "\(session.status.displayText)", "\(agentLabel)"]
+        if let tool = session.currentToolCall { parts.append("running \(tool)") }
+        if let terminal = session.terminalInfo { parts.append("in \(terminalLabel(terminal))") }
+        return parts.joined(separator: ", ")
     }
 
     private func terminalLabel(_ info: TerminalInfo) -> String {

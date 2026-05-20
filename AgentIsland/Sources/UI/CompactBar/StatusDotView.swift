@@ -14,6 +14,7 @@ struct StatusDotView: View {
             .animation(pulseAnimation, value: isPulsing)
             .onAppear { updatePulse() }
             .onChange(of: status) { _, _ in updatePulse() }
+            .accessibilityHidden(true)
     }
 
     private var pulseAnimation: Animation? {

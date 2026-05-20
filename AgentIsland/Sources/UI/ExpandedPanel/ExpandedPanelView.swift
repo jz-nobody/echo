@@ -23,6 +23,8 @@ struct ExpandedPanelView: View {
             RoundedRectangle(cornerRadius: DesignTokens.panelCornerRadius, style: .continuous)
         )
         .shadow(color: .black.opacity(0.5), radius: 12, x: 0, y: 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Agent panel")
     }
 
     private var sessionListContent: some View {

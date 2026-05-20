@@ -24,6 +24,8 @@ struct PermissionPanelView: View {
 
             buttonRow
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Permission request: \(details.operation)")
     }
 
     private var diffArea: some View {
@@ -38,6 +40,7 @@ struct PermissionPanelView: View {
         .frame(maxHeight: 160)
         .background(DesignTokens.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityLabel("Code diff, \(details.additions) additions, \(details.deletions) deletions")
     }
 
     private var statsLine: some View {
@@ -71,6 +74,7 @@ struct PermissionPanelView: View {
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.confirmationButtonRadius, style: .continuous))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Deny, keyboard shortcut Command N")
 
             Button(action: onAllow) {
                 HStack(spacing: 6) {
@@ -86,6 +90,7 @@ struct PermissionPanelView: View {
                 .clipShape(RoundedRectangle(cornerRadius: DesignTokens.confirmationButtonRadius, style: .continuous))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Allow, keyboard shortcut Command Y")
         }
     }
 }

@@ -35,11 +35,19 @@ struct ChoiceOptionRowView: View {
             .clipShape(RoundedRectangle(cornerRadius: DesignTokens.optionCardRadius, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(optionAccessibilityLabel)
         .onHover { hovering in
             withAnimation(AnimationConstants.hoverHighlight) {
                 isHovered = hovering
             }
         }
+    }
+
+    private var optionAccessibilityLabel: String {
+        var label = "Option \(index + 1): \(option.label)"
+        if let desc = option.description { label += ", \(desc)" }
+        label += ", keyboard shortcut Command \(index + 1)"
+        return label
     }
 
     private var shortcutBadge: some View {

@@ -26,6 +26,8 @@ struct ChoicePanelView: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(agentLabel) asks: \(details.question)")
     }
 
     private var agentLabel: String {
