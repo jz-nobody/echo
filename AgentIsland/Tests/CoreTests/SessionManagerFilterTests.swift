@@ -60,4 +60,60 @@ struct SessionManagerFilterTests {
 
         #expect(manager.sessions.count == 2)
     }
+
+    @Test("custom keyword filter applied during pollOnce")
+    @MainActor
+    func customKeywordFilterApplied() async {
+        let mock = MockAgentAdaptor()
+        await mock.setSessions([
+            makeSession(id: "s1", title: "Deploy staging"),
+            makeSession(id: "s2", title: "Build feature"),
+        ])
+        await mock.setUseSessionOwnStatus(true)
+
+        let settings = makeSettings()
+        settings.filterKeywords = ["deploy"]
+        let manager = SessionManager(adaptors: [mock], settingsStore: settings)
+        await manager.pollOnce()
+
+        #expect(manager.sessions.count == 1)
+        #expect(manager.sessions[0].id == "s2")
+    }
+
+    @Test("disabling built-in filters shows all sessions")
+    @MainActor
+    func disabledBuiltInShowsAll() async {
+        let mock = MockAgentAdaptor()
+        await mock.setSessions([
+            makeSession(id: "s1", title: "Memory Consolidation task"),
+            makeSession(id: "s2", title: "Normal work"),
+        ])
+        await mock.setUseSessionOwnStatus(true)
+
+        let settings = makeSettings()
+        settings.enableBuiltInFilters = false
+        let manager = SessionManager(adaptors: [mock], settingsStore: settings)
+        await manager.pollOnce()
+
+        #expect(manager.sessions.count == 2)
+    }
+
+    @Test("filter changes take effect on next poll")
+    @MainActor
+    func filterChangesEffectOnNextPoll() async {
+        let mock = MockAgentAdaptor()
+        await mock.setSessions([
+            makeSession(id: "s1", title: "Deploy staging"),
+        ])
+        await mock.setUseSessionOwnStatus(true)
+
+        let settings = makeSettings()
+        let manager = SessionManager(adaptors: [mock], settingsStore: settings)
+        await manager.pollOnce()
+        #expect(manager.sessions.count == 1)
+
+        settings.filterKeywords = ["deploy"]
+        await manager.pollOnce()
+        #expect(manager.sessions.isEmpty)
+    }
 }

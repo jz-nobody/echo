@@ -137,4 +137,48 @@ struct SettingsStoreTests {
         store.hoverDelay = 0.5
         #expect(panelState.settingsStore.hoverDelay == 0.5)
     }
+
+    @MainActor
+    @Test("filter properties have correct defaults")
+    func filterDefaults() {
+        let (store, _) = makeStore()
+        #expect(store.enableBuiltInFilters == true)
+        #expect(store.filterKeywords.isEmpty)
+    }
+
+    @MainActor
+    @Test("filter keywords persist and load")
+    func filterKeywordsRoundTrip() {
+        let suite = "test-settings-\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store1 = SettingsStore(defaults: defaults)
+        store1.filterKeywords = ["deploy", "lint"]
+        store1.enableBuiltInFilters = false
+        let store2 = SettingsStore(defaults: defaults)
+        #expect(store2.filterKeywords == ["deploy", "lint"])
+        #expect(store2.enableBuiltInFilters == false)
+    }
+
+    @MainActor
+    @Test("resetToDefaults restores filter properties")
+    func resetRestoresFilters() {
+        let (store, _) = makeStore()
+        store.filterKeywords = ["test"]
+        store.enableBuiltInFilters = false
+        store.resetToDefaults()
+        #expect(store.filterKeywords.isEmpty)
+        #expect(store.enableBuiltInFilters == true)
+    }
+
+    @MainActor
+    @Test("resetToDefaults calls persist only once")
+    func resetPersistsOnce() {
+        let suite = "test-settings-\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = SettingsStore(defaults: defaults)
+        store.hoverDelay = 0.99
+        store.resetToDefaults()
+        #expect(defaults.double(forKey: "ai.hoverDelay") == 0.15)
+        #expect(defaults.bool(forKey: "ai.enableBuiltInFilters") == true)
+    }
 }
