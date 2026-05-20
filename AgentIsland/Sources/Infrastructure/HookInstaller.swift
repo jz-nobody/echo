@@ -20,7 +20,9 @@ enum HookInstaller {
             try setExecutable(bridgeInstallPath)
             return
         }
-        try FileManager.default.copyItem(at: bridgeURL, to: URL(fileURLWithPath: bridgeInstallPath))
+        let dest = URL(fileURLWithPath: bridgeInstallPath)
+        try? FileManager.default.removeItem(at: dest)
+        try FileManager.default.copyItem(at: bridgeURL, to: dest)
         try setExecutable(bridgeInstallPath)
     }
 

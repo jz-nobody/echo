@@ -15,13 +15,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let qoderAdaptor = QoderWorkAdaptor(client: mcpClient)
         adaptors.append(qoderAdaptor)
 
-        if let claudeAdaptor = try? ClaudeCodeAdaptor() {
+        do {
+            let claudeAdaptor = try ClaudeCodeAdaptor()
             Task { await claudeAdaptor.startMonitoring() }
             self.claudeCodeAdaptor = claudeAdaptor
             adaptors.append(claudeAdaptor)
+        } catch {
+            NSLog("[AgentIsland] ClaudeCodeAdaptor init failed: \(error)")
         }
 
-        try? HookInstaller.ensureHooksInstalled()
+        do {
+            try HookInstaller.ensureHooksInstalled()
+        } catch {
+            NSLog("[AgentIsland] HookInstaller failed: \(error)")
+        }
 
         let manager = SessionManager(adaptors: adaptors)
         manager.startPolling()
