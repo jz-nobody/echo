@@ -7,6 +7,9 @@ actor ClaudeCodeAdaptor: AgentAdaptor, IPCServerDelegate {
     private var sessionFiles: [String: ClaudeSessionFile] = [:]
     private var pendingRequests: [String: [PendingConfirmation]] = [:]
     private var responseCallbacks: [String: @Sendable (HookResponse) -> Void] = [:]
+    private var cachedSubagents: [String: [SubagentInfo]] = [:]
+    private var cachedTodos: [String: [TodoItem]] = [:]
+    private var lastScanOffset: [String: UInt64] = [:]
     private var sessionWatcher: SessionFileWatcher?
     private let ipcServer: IPCServer
     let sessionsDirectoryPath: String
@@ -140,6 +143,9 @@ actor ClaudeCodeAdaptor: AgentAdaptor, IPCServerDelegate {
                 }
             }
             pendingRequests.removeValue(forKey: id)
+            cachedSubagents.removeValue(forKey: id)
+            cachedTodos.removeValue(forKey: id)
+            lastScanOffset.removeValue(forKey: id)
         }
         activeSessions = updated
         sessionFiles = updatedFiles
@@ -150,14 +156,40 @@ actor ClaudeCodeAdaptor: AgentAdaptor, IPCServerDelegate {
     private func refreshConversationData() {
         for (id, file) in sessionFiles {
             guard var session = activeSessions[id] else { continue }
-            let snap = ConversationLogParser.snapshot(cwd: file.cwd, sessionId: file.sessionId)
+            let path = ConversationLogParser.jsonlPath(cwd: file.cwd, sessionId: file.sessionId)
+
+            let snap = ConversationLogParser.snapshot(atPath: path)
             session.sessionDescription = snap.sessionDescription
             session.lastUserPrompt = snap.lastUserPrompt
             session.lastAssistantMessage = snap.lastAssistantMessage
-            session.todos = snap.todos.isEmpty ? nil : snap.todos
-            session.subagents = snap.subagents.isEmpty ? nil : snap.subagents
             session.permissionMode = snap.permissionMode
             session.isConversationCompressed = snap.isConversationCompressed
+
+            let currentFileSize = ConversationLogParser.fileSize(atPath: path)
+            let lastOffset = lastScanOffset[id] ?? 0
+            if currentFileSize > lastOffset {
+                let newSubagents = ConversationLogParser.scanAllSubagents(
+                    atPath: path,
+                    fromOffset: lastOffset
+                )
+                var merged = cachedSubagents[id] ?? []
+                for sub in newSubagents {
+                    if let idx = merged.firstIndex(where: { $0.id == sub.id }) {
+                        merged[idx] = sub
+                    } else {
+                        merged.append(sub)
+                    }
+                }
+                cachedSubagents[id] = merged
+                lastScanOffset[id] = currentFileSize
+            }
+
+            if !snap.todos.isEmpty {
+                cachedTodos[id] = snap.todos
+            }
+
+            session.subagents = cachedSubagents[id]
+            session.todos = cachedTodos[id]
             activeSessions[id] = session
         }
     }
