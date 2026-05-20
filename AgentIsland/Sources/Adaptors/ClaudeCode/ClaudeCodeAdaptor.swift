@@ -4,6 +4,7 @@ actor ClaudeCodeAdaptor: AgentAdaptor, IPCServerDelegate {
     nonisolated let agentType: AgentType = .claudeCode
 
     private var activeSessions: [String: AgentSession] = [:]
+    private var sessionFiles: [String: ClaudeSessionFile] = [:]
     private var pendingRequests: [String: [PendingConfirmation]] = [:]
     private var responseCallbacks: [String: @Sendable (HookResponse) -> Void] = [:]
     private var sessionWatcher: SessionFileWatcher?
@@ -48,8 +49,10 @@ actor ClaudeCodeAdaptor: AgentAdaptor, IPCServerDelegate {
             for file in files {
                 let session = SessionFileParser.toAgentSession(file)
                 activeSessions[session.id] = session
+                sessionFiles[session.id] = file
             }
         }
+        refreshConversationData()
         return Array(activeSessions.values)
     }
 
@@ -119,12 +122,14 @@ actor ClaudeCodeAdaptor: AgentAdaptor, IPCServerDelegate {
 
     func updateSessions(_ files: [ClaudeSessionFile]) {
         var updated: [String: AgentSession] = [:]
+        var updatedFiles: [String: ClaudeSessionFile] = [:]
         for file in files {
             var session = SessionFileParser.toAgentSession(file)
             if let confs = pendingRequests[session.id], !confs.isEmpty {
                 session.status = .waitingConfirmation
             }
             updated[session.id] = session
+            updatedFiles[session.id] = file
         }
         let removedIds = Set(activeSessions.keys).subtracting(updated.keys)
         for id in removedIds {
@@ -137,6 +142,24 @@ actor ClaudeCodeAdaptor: AgentAdaptor, IPCServerDelegate {
             pendingRequests.removeValue(forKey: id)
         }
         activeSessions = updated
+        sessionFiles = updatedFiles
+    }
+
+    // MARK: - Conversation
+
+    private func refreshConversationData() {
+        for (id, file) in sessionFiles {
+            guard var session = activeSessions[id] else { continue }
+            let snap = ConversationLogParser.snapshot(cwd: file.cwd, sessionId: file.sessionId)
+            session.sessionDescription = snap.sessionDescription
+            session.lastUserPrompt = snap.lastUserPrompt
+            session.lastAssistantMessage = snap.lastAssistantMessage
+            session.todos = snap.todos.isEmpty ? nil : snap.todos
+            session.subagents = snap.subagents.isEmpty ? nil : snap.subagents
+            session.permissionMode = snap.permissionMode
+            session.isConversationCompressed = snap.isConversationCompressed
+            activeSessions[id] = session
+        }
     }
 
     // MARK: - Private

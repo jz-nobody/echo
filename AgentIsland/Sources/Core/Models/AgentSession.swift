@@ -15,6 +15,13 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     var lastUpdate: Date
     var terminalInfo: TerminalInfo?
     var currentToolCall: String?
+    var lastUserPrompt: String?
+    var lastAssistantMessage: String?
+    var sessionDescription: String?
+    var todos: [TodoItem]?
+    var subagents: [SubagentInfo]?
+    var permissionMode: String?
+    var isConversationCompressed: Bool = false
 }
 
 struct TerminalInfo: Sendable, Equatable {
