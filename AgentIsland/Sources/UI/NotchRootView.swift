@@ -7,16 +7,17 @@ struct NotchRootView: View {
     let frontmostAppMonitor: FrontmostAppMonitor
     let windowActivator: any WindowActivating
 
-    var body: some View {
-        VStack(spacing: 0) {
-            CompactBarView(
-                status: sessionManager.aggregateStatus,
-                sessionCount: sessionManager.activeSessionCount,
-                elapsedTime: elapsedTimeText,
-                isOffline: sessionManager.health.isAnyOffline
-            )
-            .frame(height: DesignTokens.compactBarHeight)
+    @State private var previousStatuses: [String: SessionStatus] = [:]
 
+    private struct ExpandedHeightKey: PreferenceKey {
+        static let defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
+        }
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
             if panelState.isExpanded {
                 ExpandedPanelView(
                     sessions: sessionManager.sessions,
@@ -44,7 +45,21 @@ struct NotchRootView: View {
                         }
                     }
                 )
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .background(GeometryReader { proxy in
+                    Color.clear.preference(key: ExpandedHeightKey.self, value: proxy.size.height)
+                })
+                .transition(
+                    .asymmetric(
+                        insertion: .scale(scale: 0.92, anchor: .top).combined(with: .opacity),
+                        removal: .scale(scale: 0.96, anchor: .top).combined(with: .opacity)
+                    )
+                )
+            }
+
+        }
+        .onPreferenceChange(ExpandedHeightKey.self) { height in
+            if panelState.isExpanded && height > 0 {
+                panelState.expandedContentHeight = height
             }
         }
         .animation(
@@ -71,6 +86,33 @@ struct NotchRootView: View {
                 }
             }
         }
+        .onChange(of: sessionManager.sessions) {
+            let currentStatuses = Dictionary(
+                uniqueKeysWithValues: sessionManager.sessions.map { ($0.id, $0.status) }
+            )
+            defer { previousStatuses = currentStatuses }
+
+            guard !panelState.isExpanded else { return }
+
+            for (id, currentStatus) in currentStatuses {
+                guard case .completed = currentStatus else { continue }
+                guard let previous = previousStatuses[id] else { continue }
+                let wasActive: Bool
+                switch previous {
+                case .executing, .thinking, .waitingConfirmation:
+                    wasActive = true
+                default:
+                    wasActive = false
+                }
+                guard wasActive else { continue }
+
+                if let session = sessionManager.sessions.first(where: { $0.id == id }),
+                   !frontmostAppMonitor.isTerminalOfSession(session) {
+                    panelState.expand()
+                    return
+                }
+            }
+        }
     }
 
     private func shouldSuppressAutoExpand() -> Bool {
@@ -82,16 +124,4 @@ struct NotchRootView: View {
         )
     }
 
-    private var elapsedTimeText: String? {
-        let activeSessions = sessionManager.sessions.filter {
-            $0.status != .idle && $0.status != .completed
-        }
-        guard let earliest = activeSessions.min(by: { $0.startTime < $1.startTime }) else {
-            return nil
-        }
-        let elapsed = Int(Date().timeIntervalSince(earliest.startTime))
-        if elapsed < 60 { return "\(elapsed)s" }
-        if elapsed < 3600 { return "\(elapsed / 60)m" }
-        return "\(elapsed / 3600)h\((elapsed % 3600) / 60)m"
-    }
 }
