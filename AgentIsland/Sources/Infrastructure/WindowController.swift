@@ -10,6 +10,7 @@ final class WindowController: NSObject {
     private let confirmationQueue = ConfirmationQueue()
     private var hostingView: NSHostingView<AnyView>?
     private var notchInfo: NotchInfo?
+    private lazy var settingsWindowController = SettingsWindowController(settingsStore: settingsStore)
 
     private let barWidth: CGFloat = 200
     private let barHeight: CGFloat = 32
@@ -86,7 +87,15 @@ final class WindowController: NSObject {
 
     private func setupKeyMonitor() {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, self.panelState.isExpanded else { return event }
+            guard let self else { return event }
+
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if flags == .command, event.charactersIgnoringModifiers == "," {
+                self.settingsWindowController.showSettings()
+                return nil
+            }
+
+            guard self.panelState.isExpanded else { return event }
 
             if event.keyCode == 53 {
                 self.panelState.confirmationsActive = false
@@ -96,7 +105,6 @@ final class WindowController: NSObject {
             }
 
             guard let current = self.confirmationQueue.currentItem else { return event }
-            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
             if flags == .command, let chars = event.charactersIgnoringModifiers {
                 switch chars {
