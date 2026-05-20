@@ -37,13 +37,24 @@ enum DesignTokens {
     static let confirmationAllowText = Color.black
     static let confirmationDenyBackground = Color(nsColor: NSColor(hex: "#3A3A3C"))
 
+    // MARK: - Task & Subagent
+    static let todoInProgress = Color(nsColor: NSColor(hex: "#0A84FF"))
+    static let todoCompleted = Color(nsColor: NSColor(hex: "#30D158"))
+    static let todoPending = Color(nsColor: NSColor(hex: "#8E8E93"))
+    static let tagTerminalBackground = Color(nsColor: NSColor(hex: "#48484A"))
+    static let tagAutoApproveBackground = Color(nsColor: NSColor(hex: "#FF453A"))
+    static let toolBash = Color(nsColor: NSColor(hex: "#D97757"))
+    static let toolWrite = Color(nsColor: NSColor(hex: "#30D158"))
+    static let toolRead = Color(nsColor: NSColor(hex: "#0A84FF"))
+
     // MARK: - Dimensions
     static let compactBarHeight: CGFloat = 32
     static let compactBarPaddingH: CGFloat = 12
     static let compactBarCornerRadius: CGFloat = 16
+    static let compactBarWidth: CGFloat = 200
     static let statusDotSize: CGFloat = 8
-    static let panelMaxHeight: CGFloat = 560
-    static let panelMaxWidth: CGFloat = 640
+    static let panelMaxHeight: CGFloat = 550
+    static let panelMaxWidth: CGFloat = 680
     static let panelCornerRadius: CGFloat = 12
     static let confirmationButtonHeight: CGFloat = 44
     static let confirmationButtonRadius: CGFloat = 8
@@ -52,8 +63,8 @@ enum DesignTokens {
 }
 
 enum AnimationConstants {
-    static let panelExpand = Animation.spring(response: 0.3, dampingFraction: 0.85)
-    static let panelCollapse = Animation.easeOut(duration: 0.25)
+    static let panelExpand = Animation.spring(response: 0.35, dampingFraction: 0.92)
+    static let panelCollapse = Animation.easeOut(duration: 0.22)
     static let statusTransition = Animation.easeInOut(duration: 0.2)
     static let cardAppear = Animation.easeOut(duration: 0.2)
     static let confirmationSwitch = Animation.easeInOut(duration: 0.2)
