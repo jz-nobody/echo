@@ -54,7 +54,9 @@ struct SessionRowView: View {
 
     private var headerRow: some View {
         HStack(spacing: 6) {
-            StatusDotView(status: session.status)
+            PetAnimationView(status: session.status, size: DesignTokens.petSizeExpanded)
+                .frame(width: DesignTokens.petSizeExpanded, height: DesignTokens.petSizeExpanded)
+                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
 
             Text(titleText)
                 .font(.system(size: 13, weight: .medium))

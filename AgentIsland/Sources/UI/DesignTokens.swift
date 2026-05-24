@@ -48,11 +48,13 @@ enum DesignTokens {
     static let toolRead = Color(nsColor: NSColor(hex: "#0A84FF"))
 
     // MARK: - Dimensions
-    static let compactBarHeight: CGFloat = 32
+    static let compactBarHeight: CGFloat = 36
     static let compactBarPaddingH: CGFloat = 12
-    static let compactBarCornerRadius: CGFloat = 16
+    static let compactBarCornerRadius: CGFloat = 18
     static let compactBarWidth: CGFloat = 200
     static let statusDotSize: CGFloat = 8
+    static let petSizeCompact: CGFloat = 30
+    static let petSizeExpanded: CGFloat = 38
     static let panelMaxHeight: CGFloat = 550
     static let panelMaxWidth: CGFloat = 680
     static let panelCornerRadius: CGFloat = 12

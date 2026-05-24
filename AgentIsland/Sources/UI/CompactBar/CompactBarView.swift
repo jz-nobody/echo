@@ -8,7 +8,9 @@ struct CompactBarView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            StatusDotView(status: status)
+            PetAnimationView(status: status, size: DesignTokens.petSizeCompact)
+                .frame(width: DesignTokens.petSizeCompact, height: DesignTokens.petSizeCompact)
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
 
             Text(isOffline ? "Offline" : status.displayText)
                 .font(.system(size: 12, weight: .medium))
