@@ -1,12 +1,12 @@
 # Agent Island - 项目进展文档
 
-> 最后更新：2026-05-20
+> 最后更新：2026-05-25
 
 ---
 
 ## 当前阶段：Phase 3 — 体验完善
 
-Phase 1-2 全部完成（Steps 0-12, 95 tests, E2E 验证通过）。Phase 3 设置基础 + 声音系统完成（Steps 13-15, 124 tests）。
+Phase 1-2 全部完成（Steps 0-12, 95 tests, E2E 验证通过）。Phase 3 设置基础 + 声音系统 + Pet 动画 + Compact Bar 重设计 + 刘海微调完成（Steps 13-18+, 230 tests）。
 
 ---
 
@@ -23,7 +23,7 @@ Phase 1-2 全部完成（Steps 0-12, 95 tests, E2E 验证通过）。Phase 3 设
 | 架构设计 | ✅ 完成 | 2026-05-20 | Pure Swift 技术栈锁定 |
 | Phase 1: 壳子 + 单 Agent | ✅ 完成 | 2026-05-20 | Step 0-8 全部完成，64 tests |
 | Phase 2: 多 Agent 接入 | ✅ 完成 | 2026-05-20 | Claude Code 适配器完成，E2E 验证通过，95 tests |
-| Phase 3: 体验完善 | 🔄 进行中 | - | Step 13-18 设置 + 声音 + 智能抑制 + 点击跳转 + 通知过滤完成，159 tests |
+| Phase 3: 体验完善 | 🔄 进行中 | - | Step 13-18+ 设置 + 声音 + 智能抑制 + 点击跳转 + 通知过滤 + Pet 动画 + Compact Bar 重设计 + 刘海微调 + 状态同步修复，230 tests |
 | Phase 4: 稳定化 | ✅ 完成 | 2026-05-20 | Steps 19-22 代码质量+测试覆盖+性能优化+无障碍完成，170 tests |
 
 ---
@@ -52,29 +52,18 @@ Phase 1-2 全部完成（Steps 0-12, 95 tests, E2E 验证通过）。Phase 3 设
 
 ## 下一步行动
 
-### 立即可执行（Phase 1 启动条件已具备）
+### Phase 3 收尾
 
-1. **创建 Xcode 项目**
-   - 新建 macOS App 项目，SwiftUI 生命周期
-   - 配置 SPM 依赖（暂无外部依赖）
-   - 设置 .gitignore 和初始仓库
+1. **手动验证新功能交互**
+   - Pet 动画在 4 种状态间切换流畅
+   - 刘海宽度/高度微调 slider 实时生效
+   - Compact bar 状态动效正确反映 session 状态
+   - 声音事件在正确时机触发
 
-2. **实现 WindowController**
-   - 无边框 NSPanel 创建
-   - 刘海区尺寸检测和窗口定位
-   - NSTrackingArea hover 监听
-   - 展开/收起动画
-
-3. **实现 QoderWorkAdaptor**
-   - MCPClient 封装（JSON-RPC 2.0 over HTTP）
-   - qoder_list_tasks 调用
-   - qoder_get_task_detail 轮询
-   - qoder_respond_task 确认提交
-
-4. **实现基础 UI**
-   - CompactBarView（缩小态）
-   - ExpandedPanelView（扩展态 - 任务列表）
-   - ConfirmationView（确认面板 - 权限审批 + 选择题）
+2. **考虑 Phase 4 稳定化优化**
+   - 性能 profiling（WKWebView 动画内存）
+   - 长时间运行内存泄漏检查
+   - 多屏幕场景验证
 
 ---
 
