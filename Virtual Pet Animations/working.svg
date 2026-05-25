@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="256" height="256" shape-rendering="crispEdges">
+  <style>
+    .body { animation: bounce 0.6s ease-in-out infinite; }
+    .legL { animation: stepL 0.6s ease-in-out infinite; }
+    .legR { animation: stepR 0.6s ease-in-out infinite; }
+    .cord { animation: swing 0.8s ease-in-out infinite alternate; }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-0.8px); }
+    }
+    @keyframes stepL {
+      0%, 100% { transform: translateX(0) translateY(0); }
+      50% { transform: translateX(-0.3px) translateY(0.3px); }
+    }
+    @keyframes stepR {
+      0%, 100% { transform: translateX(0) translateY(0); }
+      50% { transform: translateX(0.3px) translateY(0.3px); }
+    }
+    @keyframes swing {
+      0% { transform: rotate(-5deg); }
+      100% { transform: rotate(5deg); }
+    }
+  </style>
+  <rect width="16" height="16" fill="#000000"/>
+  <g class="body">
+    <rect x="5" y="3" width="1" height="1" fill="#f5f5dc"/>
+    <rect x="6" y="3" width="1" height="1" fill="#fffff0"/>
+    <rect x="7" y="3" width="1" height="1" fill="#fffff0"/>
+    <rect x="8" y="3" width="1" height="1" fill="#fffff0"/>
+    <rect x="9" y="3" width="1" height="1" fill="#fffff0"/>
+    <rect x="10" y="3" width="1" height="1" fill="#fffff0"/>
+    <rect x="11" y="3" width="1" height="1" fill="#f5f5dc"/>
+    <rect x="5" y="4" width="1" height="1" fill="#fffff0"/>
+    <rect x="6" y="4" width="1" height="1" fill="#ffffff"/>
+    <rect x="7" y="4" width="1" height="1" fill="#ffffff"/>
+    <rect x="8" y="4" width="1" height="1" fill="#ffffff"/>
+    <rect x="9" y="4" width="1" height="1" fill="#ffffff"/>
+    <rect x="10" y="4" width="1" height="1" fill="#ffffff"/>
+    <rect x="11" y="4" width="1" height="1" fill="#fffff0"/>
+    <rect x="5" y="5" width="1" height="1" fill="#fffff0"/>
+    <rect x="6" y="5" width="1" height="1" fill="#ffffff"/>
+    <rect x="7" y="5" width="1" height="1" fill="#ffffff"/>
+    <rect x="8" y="5" width="1" height="1" fill="#ffffff"/>
+    <rect x="9" y="5" width="1" height="1" fill="#ffffff"/>
+    <rect x="10" y="5" width="1" height="1" fill="#ffffff"/>
+    <rect x="11" y="5" width="1" height="1" fill="#fffff0"/>
+    <rect x="5" y="6" width="1" height="1" fill="#fffff0"/>
+    <rect x="6" y="6" width="1" height="1" fill="#ffffff"/>
+    <rect x="7" y="6" width="1" height="1" fill="#ffffff"/>
+    <rect x="8" y="6" width="1" height="1" fill="#ffffff"/>
+    <rect x="9" y="6" width="1" height="1" fill="#ffffff"/>
+    <rect x="10" y="6" width="1" height="1" fill="#ffffff"/>
+    <rect x="11" y="6" width="1" height="1" fill="#fffff0"/>
+    <rect x="5" y="7" width="1" height="1" fill="#fffff0"/>
+    <rect x="6" y="7" width="1" height="1" fill="#ffffff"/>
+    <rect x="7" y="7" width="1" height="1" fill="#ffffff"/>
+    <rect x="8" y="7" width="1" height="1" fill="#ffffff"/>
+    <rect x="9" y="7" width="1" height="1" fill="#ffffff"/>
+    <rect x="10" y="7" width="1" height="1" fill="#ffffff"/>
+    <rect x="11" y="7" width="1" height="1" fill="#fffff0"/>
+    <rect x="5" y="8" width="1" height="1" fill="#f5f5dc"/>
+    <rect x="6" y="8" width="1" height="1" fill="#fffff0"/>
+    <rect x="7" y="8" width="1" height="1" fill="#fffff0"/>
+    <rect x="8" y="8" width="1" height="1" fill="#fffff0"/>
+    <rect x="9" y="8" width="1" height="1" fill="#fffff0"/>
+    <rect x="10" y="8" width="1" height="1" fill="#fffff0"/>
+    <rect x="11" y="8" width="1" height="1" fill="#f5f5dc"/>
+    <!-- eyes -->
+    <rect x="7" y="4" width="1" height="1" fill="#212121"/>
+    <rect x="7" y="5" width="1" height="1" fill="#212121"/>
+    <rect x="10" y="4" width="1" height="1" fill="#212121"/>
+    <rect x="10" y="5" width="1" height="1" fill="#212121"/>
+    <!-- mouth -->
+    <rect x="8" y="7" width="1" height="1" fill="#212121"/>
+    <rect x="9" y="7" width="1" height="1" fill="#212121"/>
+  </g>
+  <!-- legs -->
+  <g class="legL">
+    <rect x="6" y="9" width="1" height="1" fill="#f5f5dc"/>
+    <rect x="6" y="10" width="1" height="1" fill="#e0e0e0"/>
+  </g>
+  <g class="legR">
+    <rect x="10" y="9" width="1" height="1" fill="#f5f5dc"/>
+    <rect x="10" y="10" width="1" height="1" fill="#e0e0e0"/>
+  </g>
+  <!-- cord -->
+  <g class="cord">
+    <rect x="12" y="5" width="1" height="1" fill="#424242"/>
+    <rect x="13" y="6" width="1" height="1" fill="#424242"/>
+    <rect x="13" y="7" width="1" height="1" fill="#424242"/>
+    <rect x="12" y="8" width="1" height="1" fill="#616161"/>
+  </g>
+</svg>

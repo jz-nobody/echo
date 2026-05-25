@@ -16,6 +16,11 @@ let package = Package(
                 .process("../Resources")
             ]
         ),
+        .executableTarget(
+            name: "agent-island-bridge",
+            dependencies: [],
+            path: "BridgeCLI"
+        ),
         .testTarget(
             name: "AgentIslandTests",
             dependencies: ["AgentIsland"],

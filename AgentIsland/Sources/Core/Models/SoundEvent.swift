@@ -9,6 +9,9 @@ enum SoundEvent: String, CaseIterable, Sendable {
     case error
     case reconnected
     case idleReminder
+    case compactingCompleted
+    case askingUser
+    case runningCompleted
 
     @MainActor
     func soundName(from store: SettingsStore) -> String {
@@ -21,6 +24,7 @@ enum SoundEvent: String, CaseIterable, Sendable {
         case .error:               store.soundError
         case .reconnected:         store.soundReconnected
         case .idleReminder:        store.soundIdleReminder
+        case .compactingCompleted, .askingUser, .runningCompleted: "custom"
         }
     }
 }

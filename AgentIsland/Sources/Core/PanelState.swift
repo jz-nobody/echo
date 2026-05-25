@@ -4,10 +4,12 @@ import Foundation
 @Observable
 final class PanelState {
     private(set) var isExpanded = false
-    var confirmationsActive = false
+    var showQuitConfirmation = false
     private var expandTimer: Timer?
     private var collapseTimer: Timer?
-    private let autoCollapseDelay: TimeInterval
+    private var autoCollapseTimer: Timer?
+    let mouseExitDelay: TimeInterval
+    let autoCollapseDelay: TimeInterval
     @ObservationIgnored var onExpandChange: (() -> Void)?
     @ObservationIgnored var expandedContentHeight: CGFloat = 0 {
         didSet {
@@ -18,14 +20,21 @@ final class PanelState {
 
     let settingsStore: SettingsStore
 
-    init(settingsStore: SettingsStore, autoCollapseDelay: TimeInterval = 5.0) {
+    init(
+        settingsStore: SettingsStore,
+        mouseExitDelay: TimeInterval = 1.0,
+        autoCollapseDelay: TimeInterval = 3.0
+    ) {
         self.settingsStore = settingsStore
+        self.mouseExitDelay = mouseExitDelay
         self.autoCollapseDelay = autoCollapseDelay
     }
 
     func mouseEntered() {
         collapseTimer?.invalidate()
         collapseTimer = nil
+        autoCollapseTimer?.invalidate()
+        autoCollapseTimer = nil
         expandTimer?.invalidate()
         expandTimer = Timer.scheduledTimer(withTimeInterval: settingsStore.hoverDelay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -37,19 +46,22 @@ final class PanelState {
     func mouseExited() {
         expandTimer?.invalidate()
         expandTimer = nil
-        guard !confirmationsActive else { return }
         guard settingsStore.autoCollapseOnMouseExit else { return }
         collapseTimer?.invalidate()
-        collapseTimer = Timer.scheduledTimer(withTimeInterval: autoCollapseDelay, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.collapse()
-            }
-        }
+        collapseTimer = nil
+        collapse()
+    }
+
+    func cancelPendingExpand() {
+        expandTimer?.invalidate()
+        expandTimer = nil
     }
 
     func expand() {
         collapseTimer?.invalidate()
         collapseTimer = nil
+        autoCollapseTimer?.invalidate()
+        autoCollapseTimer = nil
         isExpanded = true
         onExpandChange?()
     }
@@ -57,16 +69,32 @@ final class PanelState {
     func collapse() {
         collapseTimer?.invalidate()
         collapseTimer = nil
+        autoCollapseTimer?.invalidate()
+        autoCollapseTimer = nil
+        expandTimer?.invalidate()
+        expandTimer = nil
+        showQuitConfirmation = false
         isExpanded = false
         onExpandChange?()
     }
 
     func autoExpand() {
-        confirmationsActive = true
         expandTimer?.invalidate()
         collapseTimer?.invalidate()
         collapseTimer = nil
-        expand()
+        autoCollapseTimer?.invalidate()
+        isExpanded = true
+        onExpandChange?()
+        autoCollapseTimer = Timer.scheduledTimer(withTimeInterval: autoCollapseDelay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.collapse()
+            }
+        }
+    }
+
+    func cancelAutoCollapse() {
+        autoCollapseTimer?.invalidate()
+        autoCollapseTimer = nil
     }
 
     func toggle() {

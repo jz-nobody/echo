@@ -1,9 +1,11 @@
 import Foundation
 
-enum AgentType: String, Sendable {
+enum AgentType: Sendable, Hashable {
     case qoderWork
     case claudeCode
     case codex
+    case gemini
+    case custom(String)
 }
 
 struct AgentSession: Identifiable, Sendable, Equatable {
@@ -22,6 +24,7 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     var subagents: [SubagentInfo]?
     var permissionMode: String?
     var isConversationCompressed: Bool = false
+    var compressedAt: Date?
 }
 
 struct TerminalInfo: Sendable, Equatable {

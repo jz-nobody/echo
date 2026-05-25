@@ -11,12 +11,32 @@ final class SoundPlayer: SoundPlayable {
         "bubble": "Pop",
     ]
 
+    private static let customSoundFiles: [SoundEvent: String] = [
+        .compactingCompleted: "压缩完成",
+        .askingUser: "询问用户",
+        .runningCompleted: "开始运行",
+    ]
+
+    private var lastPlayed: [SoundEvent: Date] = [:]
+    private static let dedupeInterval: TimeInterval = 3
+
     init(settings: SettingsStore) {
         self.settings = settings
     }
 
     func play(_ event: SoundEvent) {
         guard settings.soundEnabled else { return }
+
+        if let last = lastPlayed[event],
+           Date().timeIntervalSince(last) < Self.dedupeInterval {
+            return
+        }
+        lastPlayed[event] = Date()
+
+        if let fileName = Self.customSoundFiles[event] {
+            playCustom(fileName)
+            return
+        }
 
         let name = event.soundName(from: settings)
         guard name != "none" else { return }
@@ -34,4 +54,30 @@ final class SoundPlayer: SoundPlayable {
         sound.volume = settings.soundVolume
         sound.play()
     }
+
+    private func playCustom(_ fileName: String) {
+        guard let url = Self.soundsDirectory?.appendingPathComponent("\(fileName).wav"),
+              FileManager.default.fileExists(atPath: url.path) else {
+            NSLog("[AgentIsland] Custom sound not found: %@.wav", fileName)
+            return
+        }
+
+        guard let sound = NSSound(contentsOf: url, byReference: true) else {
+            NSLog("[AgentIsland] Failed to load sound: %@", url.path)
+            return
+        }
+
+        sound.volume = settings.soundVolume
+        sound.play()
+    }
+
+    private static let soundsDirectory: URL? = {
+        let execURL = Bundle.main.executableURL ?? URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
+        let projectRoot = execURL
+            .deletingLastPathComponent() // → debug/
+            .deletingLastPathComponent() // → arm64-apple-macosx/
+            .deletingLastPathComponent() // → .build/
+            .deletingLastPathComponent() // → project root
+        return projectRoot.appendingPathComponent("Resources/Sounds")
+    }()
 }

@@ -56,7 +56,7 @@ final class SettingsStore {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         launchAtLogin = true; hoverToExpand = true; hoverDelay = 0.15
-        smartSuppression = true; hideInFullscreen = true; hideWhenNoActiveSessions = false
+        smartSuppression = true; hideInFullscreen = false; hideWhenNoActiveSessions = false
         autoCollapseOnMouseExit = true; autoReminderDuration = 5.0; dismissOnClickOutside = true
         agentTeamAutoExpand = false; idleCleanupInterval = 7200; disableClickToJump = false
         enableBuiltInFilters = true; filterKeywords = []
@@ -76,7 +76,7 @@ final class SettingsStore {
         isLoading = true
         defer { isLoading = false; persist() }
         launchAtLogin = true; hoverToExpand = true; hoverDelay = 0.15
-        smartSuppression = true; hideInFullscreen = true; hideWhenNoActiveSessions = false
+        smartSuppression = true; hideInFullscreen = false; hideWhenNoActiveSessions = false
         autoCollapseOnMouseExit = true; autoReminderDuration = 5.0; dismissOnClickOutside = true
         agentTeamAutoExpand = false; idleCleanupInterval = 7200; disableClickToJump = false
         enableBuiltInFilters = true; filterKeywords = []

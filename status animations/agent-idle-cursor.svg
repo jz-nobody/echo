@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="256" height="256">
+  <style>
+    .cursor { animation: blink 1s step-end infinite; }
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      50.1%, 100% { opacity: 0; }
+    }
+  </style>
+  <g class="cursor">
+    <rect x="6.5" y="3" width="2.5" height="10" rx="0.8" fill="#4caf50"/>
+  </g>
+</svg>

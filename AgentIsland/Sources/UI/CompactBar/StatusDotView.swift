@@ -21,8 +21,14 @@ struct StatusDotView: View {
         switch status {
         case .thinking:
             .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
+        case .reading:
+            .easeInOut(duration: 0.7).repeatForever(autoreverses: true)
+        case .editing:
+            .easeInOut(duration: 0.5).repeatForever(autoreverses: true)
         case .executing:
             .easeInOut(duration: 0.5).repeatForever(autoreverses: true)
+        case .compacting:
+            .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
         case .waitingConfirmation:
             .easeInOut(duration: 1.0).repeatForever(autoreverses: true)
         default:
@@ -32,7 +38,7 @@ struct StatusDotView: View {
 
     private func updatePulse() {
         switch status {
-        case .thinking, .executing, .waitingConfirmation:
+        case .thinking, .reading, .editing, .executing, .compacting, .waitingConfirmation:
             isPulsing = true
         default:
             isPulsing = false

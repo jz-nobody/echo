@@ -18,7 +18,26 @@ struct NotchRootView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            if panelState.isExpanded {
+            if panelState.isExpanded, panelState.showQuitConfirmation {
+                QuitConfirmationView(
+                    onCancel: {
+                        panelState.showQuitConfirmation = false
+                        panelState.collapse()
+                    },
+                    onConfirm: {
+                        NSApplication.shared.terminate(nil)
+                    }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(DesignTokens.panelBackground)
+                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.panelCornerRadius))
+                .transition(
+                    .asymmetric(
+                        insertion: .scale(scale: 0.92, anchor: .top).combined(with: .opacity),
+                        removal: .scale(scale: 0.3, anchor: .top).combined(with: .opacity)
+                    )
+                )
+            } else if panelState.isExpanded {
                 ExpandedPanelView(
                     sessions: sessionManager.sessions,
                     confirmationQueue: confirmationQueue,
@@ -31,7 +50,13 @@ struct NotchRootView: View {
                         guard !panelState.settingsStore.filterKeywords.contains(keyword) else { return }
                         panelState.settingsStore.filterKeywords.append(keyword)
                     },
+                    onRevokeAutoApprove: { session in
+                        Task {
+                            await sessionManager.revokeAutoApprove(session: session)
+                        }
+                    },
                     onRespond: { item, response in
+                        confirmationQueue.removeItem(id: item.id)
                         Task {
                             do {
                                 try await sessionManager.respond(
@@ -42,6 +67,10 @@ struct NotchRootView: View {
                             } catch {
                                 NSLog("[AgentIsland] Respond failed: \(error)")
                             }
+                            confirmationQueue.update(
+                                from: sessionManager.pendingConfirmations,
+                                sessions: sessionManager.sessions
+                            )
                         }
                     }
                 )
@@ -51,7 +80,7 @@ struct NotchRootView: View {
                 .transition(
                     .asymmetric(
                         insertion: .scale(scale: 0.92, anchor: .top).combined(with: .opacity),
-                        removal: .scale(scale: 0.96, anchor: .top).combined(with: .opacity)
+                        removal: .scale(scale: 0.3, anchor: .top).combined(with: .opacity)
                     )
                 )
             }
@@ -66,22 +95,24 @@ struct NotchRootView: View {
             panelState.isExpanded ? AnimationConstants.panelExpand : AnimationConstants.panelCollapse,
             value: panelState.isExpanded
         )
-        .onChange(of: sessionManager.pendingConfirmations.count) {
+        .onChange(of: sessionManager.totalConfirmationCount) {
             confirmationQueue.update(
                 from: sessionManager.pendingConfirmations,
                 sessions: sessionManager.sessions
             )
             if !confirmationQueue.isEmpty {
-                if !shouldSuppressAutoExpand() {
+                if panelState.isExpanded {
+                    panelState.cancelAutoCollapse()
+                } else if !shouldSuppressAutoExpand() {
                     panelState.autoExpand()
                 }
-            } else {
-                panelState.confirmationsActive = false
             }
         }
         .onChange(of: frontmostAppMonitor.frontmostAppPID) {
-            if !confirmationQueue.isEmpty && !panelState.isExpanded {
-                if !shouldSuppressAutoExpand() {
+            if !confirmationQueue.isEmpty {
+                if panelState.isExpanded {
+                    panelState.cancelAutoCollapse()
+                } else if !shouldSuppressAutoExpand() {
                     panelState.autoExpand()
                 }
             }
@@ -99,7 +130,7 @@ struct NotchRootView: View {
                 guard let previous = previousStatuses[id] else { continue }
                 let wasActive: Bool
                 switch previous {
-                case .executing, .thinking, .waitingConfirmation:
+                case .executing, .reading, .editing, .thinking, .compacting, .waitingConfirmation:
                     wasActive = true
                 default:
                     wasActive = false
@@ -108,7 +139,7 @@ struct NotchRootView: View {
 
                 if let session = sessionManager.sessions.first(where: { $0.id == id }),
                    !frontmostAppMonitor.isTerminalOfSession(session) {
-                    panelState.expand()
+                    panelState.autoExpand()
                     return
                 }
             }

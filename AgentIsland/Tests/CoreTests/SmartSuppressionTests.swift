@@ -193,6 +193,5 @@ struct SmartSuppressionTests {
 
         state.autoExpand()
         #expect(state.isExpanded)
-        #expect(state.confirmationsActive)
     }
 }

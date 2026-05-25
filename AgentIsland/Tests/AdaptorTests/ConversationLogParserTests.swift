@@ -275,6 +275,46 @@ struct ConversationLogParserTests {
         ])
         let snap = ConversationLogParser.snapshot(atPath: path)
         #expect(snap.isConversationCompressed == false)
+        #expect(snap.entriesSinceCompact == nil)
+    }
+
+    @Test("entriesSinceCompact is 0 when compact_boundary is last entry")
+    func entriesSinceCompactZero() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Start"}]}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"OK"}]}}"#,
+            #"{"type":"system","subtype":"compact_boundary","content":"Compacted"}"#
+        ])
+        let snap = ConversationLogParser.snapshot(atPath: path)
+        #expect(snap.isConversationCompressed == true)
+        #expect(snap.isPostCompact == true)
+        #expect(snap.entriesSinceCompact == 0)
+    }
+
+    @Test("entriesSinceCompact counts entries after compact_boundary")
+    func entriesSinceCompactWithSummary() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Start"}]}}"#,
+            #"{"type":"system","subtype":"compact_boundary","content":"Compacted"}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Summary"}]}}"#,
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Continue"}]}}"#
+        ])
+        let snap = ConversationLogParser.snapshot(atPath: path)
+        #expect(snap.isConversationCompressed == true)
+        #expect(snap.isPostCompact == false)
+        #expect(snap.entriesSinceCompact == 2)
+    }
+
+    @Test("entriesSinceCompact skips metadata entries in count")
+    func entriesSinceCompactSkipsMetadata() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"system","subtype":"compact_boundary","content":"Compacted"}"#,
+            #"{"type":"ai-title","title":"Test"}"#,
+            #"{"type":"queue-operation","operation":"enqueue"}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Summary"}]}}"#
+        ])
+        let snap = ConversationLogParser.snapshot(atPath: path)
+        #expect(snap.entriesSinceCompact == 1)
     }
 
     @Test("snapshot subagents include tool_use id")
@@ -378,5 +418,85 @@ struct ConversationLogParserTests {
     func fileSizeNonexistent() {
         let size = ConversationLogParser.fileSize(atPath: "/tmp/nonexistent-\(UUID()).jsonl")
         #expect(size == 0)
+    }
+
+    // MARK: - currentToolCall tests
+
+    @Test("snapshot extracts currentToolCall for Bash with command summary")
+    func snapshotCurrentToolCallBash() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Run tests"}]}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"swift test --parallel"}}]}}"#
+        ])
+
+        let snap = ConversationLogParser.snapshot(atPath: path)
+
+        #expect(snap.currentToolCall == "Bash swift test --parallel")
+        #expect(snap.lastToolName == "Bash")
+    }
+
+    @Test("snapshot extracts currentToolCall for Read with filename only")
+    func snapshotCurrentToolCallRead() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Check file"}]}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/Users/dev/project/Sources/Model.swift"}}]}}"#
+        ])
+
+        let snap = ConversationLogParser.snapshot(atPath: path)
+
+        #expect(snap.currentToolCall == "Read Model.swift")
+    }
+
+    @Test("snapshot extracts currentToolCall for TodoWrite")
+    func snapshotCurrentToolCallTodoWrite() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Plan work"}]}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"TodoWrite","input":{"todos":[{"content":"Task","status":"pending","activeForm":"Doing"}]}}]}}"#
+        ])
+
+        let snap = ConversationLogParser.snapshot(atPath: path)
+
+        #expect(snap.currentToolCall == "TodoWrite")
+    }
+
+    @Test("snapshot returns nil currentToolCall for text-only assistant")
+    func snapshotCurrentToolCallNilForText() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Hello"}]}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hi there"}]}}"#
+        ])
+
+        let snap = ConversationLogParser.snapshot(atPath: path)
+
+        #expect(snap.currentToolCall == nil)
+    }
+
+    @Test("snapshot truncates long Bash commands in currentToolCall")
+    func snapshotCurrentToolCallTruncation() throws {
+        let longCmd = String(repeating: "x", count: 100)
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Go"}]}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":""# + longCmd + #""}}]}}"#
+        ])
+
+        let snap = ConversationLogParser.snapshot(atPath: path)
+
+        #expect(snap.currentToolCall != nil)
+        #expect(snap.currentToolCall!.count <= 65)
+        #expect(snap.currentToolCall!.hasSuffix("..."))
+    }
+
+    @Test("snapshot extracts plain string content from CLI sessions")
+    func snapshotPlainStringContent() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":"Hello from CLI"}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Reply from assistant"}]}}"#
+        ])
+
+        let snap = ConversationLogParser.snapshot(atPath: path)
+
+        #expect(snap.lastUserPrompt == "Hello from CLI")
+        #expect(snap.sessionDescription == "Hello from CLI")
+        #expect(snap.lastAssistantMessage == "Reply from assistant")
     }
 }

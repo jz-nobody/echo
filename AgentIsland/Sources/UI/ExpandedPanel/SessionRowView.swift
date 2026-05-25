@@ -4,8 +4,10 @@ struct SessionRowView: View {
     let session: AgentSession
     var onTap: (() -> Void)? = nil
     var onAddToFilter: ((String) -> Void)? = nil
+    var onRevokeAutoApprove: (() -> Void)? = nil
 
     @State private var isHovered = false
+    @State private var autoApproveHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -17,14 +19,17 @@ struct SessionRowView: View {
 
             if let todos = session.todos, !todos.isEmpty {
                 TaskSectionView(todos: todos)
+                    .padding(.leading, 6)
             }
 
             if let subagents = session.subagents, !subagents.isEmpty {
                 SubagentSectionView(subagents: subagents)
+                    .padding(.leading, 6)
             }
         }
         .padding(.vertical, 8)
-        .padding(.horizontal, 10)
+        .padding(.leading, 0)
+        .padding(.trailing, 6)
         .background(isHovered ? DesignTokens.cardHover : DesignTokens.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .contentShape(Rectangle())
@@ -53,15 +58,39 @@ struct SessionRowView: View {
     // MARK: - Header Row
 
     private var headerRow: some View {
-        HStack(spacing: 6) {
-            PetAnimationView(status: session.status, size: DesignTokens.petSizeExpanded)
-                .frame(width: DesignTokens.petSizeExpanded, height: DesignTokens.petSizeExpanded)
-                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        HStack(spacing: 2) {
+            HStack(spacing: -8) {
+                PetAnimationView(status: session.status, size: DesignTokens.petSizeExpanded)
+                    .frame(width: DesignTokens.petSizeExpanded, height: DesignTokens.petSizeExpanded)
+                    .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
 
-            Text(titleText)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(DesignTokens.textPrimary)
-                .lineLimit(1)
+                StatusAnimationView(status: session.status, size: DesignTokens.statusIndicatorSize)
+                    .frame(width: DesignTokens.statusIndicatorSize, height: DesignTokens.statusIndicatorSize)
+            }
+            .offset(x: -4)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(session.title)
+                    .font(.system(size: showsInlineStatus ? 13 : 14,
+                                  weight: showsInlineStatus ? .medium : .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                if let text = inlineStatusText {
+                    Text(text)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(inlineStatusColor)
+                }
+            }
+            .layoutPriority(1)
+
+            if let desc = session.sessionDescription {
+                Text(desc)
+                    .font(.system(size: showsInlineStatus ? 13 : 14,
+                                  weight: showsInlineStatus ? .medium : .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
 
             Spacer(minLength: 4)
 
@@ -77,28 +106,23 @@ struct SessionRowView: View {
         }
     }
 
-    private var titleText: String {
-        if let desc = session.sessionDescription {
-            return "\(session.title) · \(desc)"
-        }
-        return session.title
-    }
-
     // MARK: - User Prompt
 
     @ViewBuilder
     private var userPromptLine: some View {
         if let prompt = session.lastUserPrompt {
-            HStack(spacing: 4) {
+            HStack(alignment: .top, spacing: 4) {
                 Text("你：")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(DesignTokens.textSecondary)
+                    .fixedSize()
                 Text(prompt)
                     .font(.system(size: 11))
                     .foregroundStyle(DesignTokens.textSecondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
             }
-            .padding(.leading, 16)
+            .padding(.leading, 6)
         }
     }
 
@@ -107,16 +131,24 @@ struct SessionRowView: View {
     @ViewBuilder
     private var agentActionLine: some View {
         if let tool = session.currentToolCall {
-            toolCallText(tool)
-                .lineLimit(1)
-                .padding(.leading, 16)
+            (agentPrefix + toolCallText(tool))
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .padding(.leading, 6)
         } else if let reply = session.lastAssistantMessage {
-            Text(reply)
+            (agentPrefix + Text(reply)
                 .font(.system(size: 11))
-                .foregroundStyle(DesignTokens.textSecondary)
-                .lineLimit(1)
-                .padding(.leading, 16)
+                .foregroundColor(DesignTokens.textSecondary))
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .padding(.leading, 6)
         }
+    }
+
+    private var agentPrefix: Text {
+        Text("\(agentLabel)：")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundColor(tagColor)
     }
 
     private func toolCallText(_ tool: String) -> Text {
@@ -143,24 +175,40 @@ struct SessionRowView: View {
 
     @ViewBuilder
     private var statusSubtitle: some View {
-        if session.status == .idle {
-            Text("就绪")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(DesignTokens.statusCompleted)
-                .padding(.leading, 16)
-        } else if session.status == .completed {
-            Text("Done — click to jump")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(DesignTokens.statusCompleted)
-                .padding(.leading, 16)
+        switch session.status {
+        case .idle, .executing, .compacting, .waitingConfirmation:
+            EmptyView()
+        case .reading:
+            statusLabel("查询中", color: DesignTokens.statusReading)
+        case .editing:
+            statusLabel("编辑中", color: DesignTokens.statusEditing)
+        case .thinking:
+            statusLabel("思考中", color: DesignTokens.statusThinking)
+        case .completed:
+            statusLabel("已完成", color: DesignTokens.statusCompleted)
+        case .error(let msg):
+            statusLabel("错误: \(msg)", color: DesignTokens.statusError)
         }
+    }
+
+    private func statusLabel(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(color)
+            .padding(.leading, 6)
     }
 
     // MARK: - Compressed Indicator
 
+    private var shouldShowCompressedTag: Bool {
+        guard session.isConversationCompressed,
+              let compressedAt = session.compressedAt else { return false }
+        return Date().timeIntervalSince(compressedAt) < 30
+    }
+
     @ViewBuilder
     private var compressedIndicator: some View {
-        if session.isConversationCompressed {
+        if shouldShowCompressedTag {
             HStack(spacing: 4) {
                 Image(systemName: "circle.slash")
                     .font(.system(size: 10))
@@ -168,7 +216,7 @@ struct SessionRowView: View {
                     .font(.system(size: 11, weight: .medium))
             }
             .foregroundStyle(DesignTokens.statusError)
-            .padding(.leading, 16)
+            .padding(.leading, 6)
         }
     }
 
@@ -177,40 +225,63 @@ struct SessionRowView: View {
     @ViewBuilder
     private var autoApproveTag: some View {
         if let mode = session.permissionMode, mode != "default" {
-            Text("自动批准 ×")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(DesignTokens.tagAutoApproveBackground)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(DesignTokens.tagAutoApproveBackground.opacity(0.15))
-                .clipShape(Capsule())
+            HStack(spacing: 4) {
+                Text("自动批准")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(DesignTokens.tagAutoApproveBackground)
+                if autoApproveHovered {
+                    Button {
+                        onRevokeAutoApprove?()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(DesignTokens.tagAutoApproveBackground)
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.scale.combined(with: .opacity))
+                    .accessibilityLabel("取消自动批准")
+                }
+            }
+            .frame(height: 18)
+            .padding(.horizontal, 5)
+            .background(DesignTokens.tagAutoApproveBackground.opacity(0.15))
+            .clipShape(Capsule())
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    autoApproveHovered = hovering
+                }
+            }
         }
     }
 
     private var agentTypeTag: some View {
         Text(agentLabel)
-            .font(.system(size: 10, weight: .medium))
+            .font(.system(size: 9, weight: .medium))
             .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .frame(height: 18)
+            .padding(.horizontal, 5)
             .background(tagColor)
             .clipShape(Capsule())
     }
 
     private func terminalTag(_ info: TerminalInfo) -> some View {
         Text(terminalLabel(info))
-            .font(.system(size: 10, weight: .medium))
+            .font(.system(size: 9, weight: .medium))
             .foregroundStyle(.white.opacity(0.9))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .frame(height: 18)
+            .padding(.horizontal, 5)
             .background(DesignTokens.tagTerminalBackground)
             .clipShape(Capsule())
     }
 
     private var timeTag: some View {
         Text(relativeTime)
-            .font(.system(size: 10))
+            .font(.system(size: 9, weight: .medium))
             .foregroundStyle(DesignTokens.textSecondary)
+            .frame(height: 18)
+            .padding(.horizontal, 5)
+            .background(DesignTokens.textSecondary.opacity(0.12))
+            .clipShape(Capsule())
     }
 
     private var relativeTime: String {
@@ -224,19 +295,11 @@ struct SessionRowView: View {
     // MARK: - Helpers
 
     private var agentLabel: String {
-        switch session.agentType {
-        case .qoderWork: "Qoder"
-        case .claudeCode: "Claude"
-        case .codex: "Codex"
-        }
+        AgentColorRegistry.shared.label(for: session.agentType)
     }
 
     private var tagColor: Color {
-        switch session.agentType {
-        case .qoderWork: DesignTokens.tagQoderWork
-        case .claudeCode: DesignTokens.tagClaude
-        case .codex: DesignTokens.tagCodex
-        }
+        AgentColorRegistry.shared.color(for: session.agentType)
     }
 
     private var sessionAccessibilityLabel: String {
@@ -253,6 +316,33 @@ struct SessionRowView: View {
         case "claude-vscode": "VS Code"
         case "cli": "Terminal"
         default: info.appName
+        }
+    }
+
+    private var showsInlineStatus: Bool {
+        switch session.status {
+        case .idle, .executing, .compacting, .waitingConfirmation: return true
+        default: return false
+        }
+    }
+
+    private var inlineStatusText: String? {
+        switch session.status {
+        case .idle: "就绪"
+        case .executing: "运行中"
+        case .compacting: "压缩中"
+        case .waitingConfirmation: "询问中"
+        default: nil
+        }
+    }
+
+    private var inlineStatusColor: Color {
+        switch session.status {
+        case .idle: DesignTokens.statusCompleted
+        case .executing: DesignTokens.statusExecuting
+        case .compacting: DesignTokens.statusCompacting
+        case .waitingConfirmation: DesignTokens.statusWaiting
+        default: DesignTokens.textSecondary
         }
     }
 }

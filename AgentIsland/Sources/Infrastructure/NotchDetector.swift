@@ -7,15 +7,14 @@ struct NotchInfo {
     let screenFrame: NSRect
     let barOriginX: CGFloat
     let barOriginY: CGFloat
+    let barWidth: CGFloat
 }
 
 enum NotchDetector {
-    private static let noNotchBarOffset: CGFloat = 100
-
-    static func detect(for screen: NSScreen? = nil) -> NotchInfo {
+    static func detect(for screen: NSScreen? = nil, widthOffset: CGFloat = 0, heightOffset: CGFloat = 0) -> NotchInfo {
         guard let targetScreen = screen ?? NSScreen.main ?? NSScreen.screens.first else {
             return NotchInfo(hasNotch: false, notchWidth: 0, notchHeight: 24,
-                             screenFrame: .zero, barOriginX: noNotchBarOffset, barOriginY: 0)
+                             screenFrame: .zero, barOriginX: 0, barOriginY: 0, barWidth: 360)
         }
         let frame = targetScreen.frame
         let visibleFrame = targetScreen.visibleFrame
@@ -23,18 +22,15 @@ enum NotchDetector {
         let menuBarHeight = frame.maxY - visibleFrame.maxY
         let hasNotch = menuBarHeight > 24
 
-        let notchHeight: CGFloat = hasNotch ? menuBarHeight : 24
+        let notchHeight: CGFloat = (hasNotch ? menuBarHeight : 24) + heightOffset
         let notchWidth: CGFloat = hasNotch ? estimateNotchWidth(screen: targetScreen) : 0
 
-        let barOriginX: CGFloat
-        if hasNotch {
-            let notchCenterX = frame.midX
-            let notchRightEdge = notchCenterX + (notchWidth / 2)
-            barOriginX = notchRightEdge + 4
-        } else {
-            barOriginX = frame.midX + noNotchBarOffset
-        }
-
+        let leftPad: CGFloat = 70
+        let rightPad: CGFloat = 100
+        let barWidth: CGFloat = (hasNotch ? notchWidth + leftPad + rightPad : 360) + widthOffset
+        let barOriginX = hasNotch
+            ? frame.midX - notchWidth / 2 - leftPad - widthOffset / 2
+            : frame.midX - barWidth / 2
         let barOriginY = frame.maxY - notchHeight
 
         return NotchInfo(
@@ -43,7 +39,8 @@ enum NotchDetector {
             notchHeight: notchHeight,
             screenFrame: frame,
             barOriginX: barOriginX,
-            barOriginY: barOriginY
+            barOriginY: barOriginY,
+            barWidth: barWidth
         )
     }
 

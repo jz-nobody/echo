@@ -8,7 +8,8 @@ struct PetAnimationView: NSViewRepresentable {
     var animationName: String {
         switch status {
         case .idle, .completed: "resting"
-        case .thinking, .executing: "working"
+        case .thinking, .reading, .editing, .executing: "working"
+        case .compacting: "compacting"
         case .waitingConfirmation: "questioning"
         case .error: "socket-face"
         }

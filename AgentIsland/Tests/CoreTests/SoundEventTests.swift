@@ -5,9 +5,9 @@ import Foundation
 @Suite("SoundEvent Tests")
 struct SoundEventTests {
 
-    @Test("SoundEvent has 8 cases")
+    @Test("SoundEvent has 11 cases")
     func caseCount() {
-        #expect(SoundEvent.allCases.count == 8)
+        #expect(SoundEvent.allCases.count == 11)
     }
 
     @Test("soundName returns correct setting per event")

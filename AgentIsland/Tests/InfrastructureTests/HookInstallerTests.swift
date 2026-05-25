@@ -12,7 +12,7 @@ struct HookInstallerTests {
         return dir.appendingPathComponent("settings.json").path
     }
 
-    @Test("registerHook adds PermissionRequest hook to empty settings")
+    @Test("registerHook adds all hook types to empty settings")
     func registerHookEmpty() throws {
         let path = tempSettingsPath()
         try "{}".write(toFile: path, atomically: true, encoding: .utf8)
@@ -24,12 +24,14 @@ struct HookInstallerTests {
         let data = try Data(contentsOf: URL(fileURLWithPath: path))
         let settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         let hooks = settings["hooks"] as! [String: Any]
-        let permHooks = hooks["PermissionRequest"] as! [[String: Any]]
-        #expect(permHooks.count == 1)
 
-        let hookEntry = (permHooks[0]["hooks"] as! [[String: Any]]).first!
-        #expect(hookEntry["timeout"] as? Int == 86400)
-        #expect((hookEntry["command"] as? String)?.contains("agent-island") == true)
+        for (hookType, expectedTimeout) in HookInstaller.requiredHookTypes {
+            let entries = hooks[hookType] as! [[String: Any]]
+            #expect(entries.count == 1, "Expected 1 entry for \(hookType)")
+            let hookEntry = (entries[0]["hooks"] as! [[String: Any]]).first!
+            #expect(hookEntry["timeout"] as? Int == expectedTimeout)
+            #expect((hookEntry["command"] as? String)?.contains("agent-island") == true)
+        }
     }
 
     @Test("registerHook is idempotent")
@@ -43,8 +45,11 @@ struct HookInstallerTests {
         let data = try Data(contentsOf: URL(fileURLWithPath: path))
         let settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         let hooks = settings["hooks"] as! [String: Any]
-        let permHooks = hooks["PermissionRequest"] as! [[String: Any]]
-        #expect(permHooks.count == 1)
+
+        for (hookType, _) in HookInstaller.requiredHookTypes {
+            let entries = hooks[hookType] as! [[String: Any]]
+            #expect(entries.count == 1, "\(hookType) should have exactly 1 entry after idempotent install")
+        }
     }
 
     @Test("registerHook preserves existing hooks")
@@ -78,8 +83,14 @@ struct HookInstallerTests {
         let permHooks = hooks["PermissionRequest"] as! [[String: Any]]
         #expect(permHooks.count == 2)
 
-        let postHooks = hooks["PostToolUse"] as? [[String: Any]]
-        #expect(postHooks?.count == 1)
+        let postHooks = hooks["PostToolUse"] as! [[String: Any]]
+        #expect(postHooks.count == 2)
+
+        let loggerEntry = postHooks.first { entry in
+            guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
+            return entryHooks.contains { ($0["command"] as? String) == "logger" }
+        }
+        #expect(loggerEntry != nil)
     }
 
     @Test("isHookInstalled returns false for no settings file")

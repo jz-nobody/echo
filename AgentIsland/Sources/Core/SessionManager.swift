@@ -22,6 +22,10 @@ final class SessionManager {
         SessionStatus.highest(sessions.map(\.status))
     }
 
+    var totalConfirmationCount: Int {
+        pendingConfirmations.values.reduce(0) { $0 + $1.count }
+    }
+
     var activeSessionCount: Int {
         sessions.filter { $0.status != .idle && $0.status != .completed }.count
     }
@@ -29,8 +33,8 @@ final class SessionManager {
     init(
         adaptors: [any AgentAdaptor],
         settingsStore: SettingsStore,
-        pollInterval: TimeInterval = 2.0,
-        idlePollInterval: TimeInterval = 10.0,
+        pollInterval: TimeInterval = 1.0,
+        idlePollInterval: TimeInterval = 5.0,
         retryPolicy: RetryPolicy = .standard,
         health: AdaptorHealth = AdaptorHealth(),
         soundPlayer: (any SoundPlayable)? = nil
@@ -44,6 +48,9 @@ final class SessionManager {
         self.soundPlayer = soundPlayer
     }
 
+    private var confirmationObserver: NSObjectProtocol?
+    private var statusObserver: NSObjectProtocol?
+
     func startPolling() {
         guard pollTask == nil else { return }
         isPolling = true
@@ -51,9 +58,27 @@ final class SessionManager {
             while !Task.isCancelled {
                 await self?.pollOnce()
                 let interval = (self?.activeSessionCount ?? 0) > 0
-                    ? (self?.pollInterval ?? 2)
-                    : (self?.idlePollInterval ?? 10)
+                    ? (self?.pollInterval ?? 1)
+                    : (self?.idlePollInterval ?? 5)
                 try? await Task.sleep(for: .seconds(interval))
+            }
+        }
+        confirmationObserver = NotificationCenter.default.addObserver(
+            forName: ClaudeCodeAdaptor.confirmationReceivedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.pollOnce()
+            }
+        }
+        statusObserver = NotificationCenter.default.addObserver(
+            forName: ClaudeCodeAdaptor.statusChangedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            MainActor.assumeIsolated {
+                self?.applyHookStatus(from: notification)
             }
         }
     }
@@ -62,6 +87,14 @@ final class SessionManager {
         pollTask?.cancel()
         pollTask = nil
         isPolling = false
+        if let observer = confirmationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            confirmationObserver = nil
+        }
+        if let observer = statusObserver {
+            NotificationCenter.default.removeObserver(observer)
+            statusObserver = nil
+        }
     }
 
     func respond(
@@ -79,6 +112,47 @@ final class SessionManager {
             soundPlayer?.play(.confirmationDenied)
         }
         await pollOnce()
+    }
+
+    func revokeAutoApprove(session: AgentSession) async {
+        for adaptor in adaptors where adaptor.agentType == session.agentType {
+            await adaptor.revokeAutoApprove(session: session)
+        }
+        await pollOnce()
+    }
+
+    private func applyHookStatus(from notification: Notification) {
+        guard let info = notification.userInfo,
+              let sessionId = info["sessionId"] as? String,
+              let status = info["status"] as? SessionStatus else {
+            DebugLog.log("APPLY-HOOK: GUARD FAILED - info=\(notification.userInfo.debugDescription)")
+            return
+        }
+        if let idx = sessions.firstIndex(where: { $0.id == sessionId }) {
+            let prev = sessions[idx].status
+            sessions[idx].status = status
+            DebugLog.log("APPLY-HOOK: session=\(sessionId.prefix(8)) \(prev.displayText)→\(status.displayText) idx=\(idx)")
+            playTransitionSound(from: prev, to: status)
+        } else {
+            DebugLog.log("APPLY-HOOK: session=\(sessionId.prefix(8)) NOT FOUND in sessions (count=\(sessions.count))")
+        }
+        if status != .waitingConfirmation && pendingConfirmations[sessionId] != nil {
+            pendingConfirmations.removeValue(forKey: sessionId)
+        }
+    }
+
+    private func playTransitionSound(from prev: SessionStatus, to status: SessionStatus) {
+        let event: SoundEvent?
+        if prev == .compacting && status != .compacting {
+            event = .compactingCompleted
+        } else if prev != .waitingConfirmation && status == .waitingConfirmation {
+            event = .askingUser
+        } else if prev.isActive && (status == .completed || status == .idle) {
+            event = .runningCompleted
+        } else {
+            event = nil
+        }
+        if let event { soundPlayer?.play(event) }
     }
 
     func pollOnce() async {

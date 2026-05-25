@@ -5,4 +5,9 @@ protocol AgentAdaptor: Sendable {
     func getStatus(session: AgentSession) async throws -> SessionStatus
     func getPendingConfirmations(session: AgentSession) async throws -> [PendingConfirmation]
     func respond(session: AgentSession, confirmation: PendingConfirmation, response: ConfirmationResponse) async throws
+    func revokeAutoApprove(session: AgentSession) async
+}
+
+extension AgentAdaptor {
+    func revokeAutoApprove(session: AgentSession) async {}
 }

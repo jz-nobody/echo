@@ -21,7 +21,6 @@
       100% { transform: rotate(5deg); }
     }
   </style>
-  <rect width="16" height="16" fill="#000000"/>
   <g class="body">
     <rect x="5" y="3" width="1" height="1" fill="#f5f5dc"/>
     <rect x="6" y="3" width="1" height="1" fill="#fffff0"/>

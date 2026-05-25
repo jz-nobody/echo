@@ -25,7 +25,6 @@
       75% { transform: translateX(0.5px) rotate(8deg); }
     }
   </style>
-  <rect width="16" height="16" fill="#000000"/>
   <g class="body">
     <!-- body plate -->
     <rect x="5" y="2" width="1" height="1" fill="#f5f5dc"/>

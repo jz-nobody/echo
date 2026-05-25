@@ -26,6 +26,8 @@ final class TrackingView: NSView {
         addTrackingArea(area)
     }
 
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
     override func mouseEntered(with event: NSEvent) {
         onMouseEntered()
     }

@@ -31,18 +31,10 @@ struct ChoicePanelView: View {
     }
 
     private var agentLabel: String {
-        switch agentType {
-        case .qoderWork: "Qoder"
-        case .claudeCode: "Claude"
-        case .codex: "Codex"
-        }
+        AgentColorRegistry.shared.label(for: agentType)
     }
 
     private var agentColor: Color {
-        switch agentType {
-        case .qoderWork: DesignTokens.tagQoderWork
-        case .claudeCode: DesignTokens.tagClaude
-        case .codex: DesignTokens.tagCodex
-        }
+        AgentColorRegistry.shared.color(for: agentType)
     }
 }

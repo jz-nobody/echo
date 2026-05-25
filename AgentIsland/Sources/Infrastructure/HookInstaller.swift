@@ -14,21 +14,40 @@ enum HookInstaller {
         let binDir = (bridgeInstallPath as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(atPath: binDir, withIntermediateDirectories: true)
 
-        guard let bridgeURL = Bundle.main.url(forResource: "agent-island-bridge", withExtension: nil) else {
-            let script = Self.fallbackBridgeScript
-            try script.write(toFile: bridgeInstallPath, atomically: true, encoding: .utf8)
+        let fm = FileManager.default
+        let dest = URL(fileURLWithPath: bridgeInstallPath)
+
+        let candidates: [URL?] = [
+            Bundle.main.url(forResource: "agent-island-bridge", withExtension: nil),
+            Bundle.main.executableURL.map {
+                $0.deletingLastPathComponent().appendingPathComponent("agent-island-bridge")
+            },
+        ]
+
+        for case let url? in candidates where fm.fileExists(atPath: url.path) {
+            try? fm.removeItem(at: dest)
+            try fm.copyItem(at: url, to: dest)
             try setExecutable(bridgeInstallPath)
             return
         }
-        let dest = URL(fileURLWithPath: bridgeInstallPath)
-        try? FileManager.default.removeItem(at: dest)
-        try FileManager.default.copyItem(at: bridgeURL, to: dest)
+
+        let script = Self.fallbackBridgeScript
+        try script.write(toFile: bridgeInstallPath, atomically: true, encoding: .utf8)
         try setExecutable(bridgeInstallPath)
     }
 
     static func registerHook() throws {
         try registerHook(settingsPath: claudeSettingsPath)
     }
+
+    static let requiredHookTypes: [(type: String, timeout: Int)] = [
+        ("PermissionRequest", 86400),
+        ("PreToolUse", 5),
+        ("PostToolUse", 5),
+        ("UserPromptSubmit", 5),
+        ("PreCompact", 5),
+        ("Stop", 5),
+    ]
 
     static func registerHook(settingsPath: String) throws {
         let fm = FileManager.default
@@ -42,30 +61,37 @@ enum HookInstaller {
         }
 
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
-        var permissionHooks = hooks["PermissionRequest"] as? [[String: Any]] ?? []
 
-        let alreadyInstalled = permissionHooks.contains { entry in
-            guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
-            return entryHooks.contains { hook in
-                guard let command = hook["command"] as? String else { return false }
-                return command.contains(hookIdentifier)
+        let allInstalled = requiredHookTypes.allSatisfy { hookType, _ in
+            guard let entries = hooks[hookType] as? [[String: Any]] else { return false }
+            return entries.contains { entry in
+                guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
+                return entryHooks.contains { ($0["command"] as? String)?.contains(hookIdentifier) == true }
             }
         }
+        guard !allInstalled else { return }
 
-        guard !alreadyInstalled else { return }
+        for (hookType, timeout) in requiredHookTypes {
+            var entries = hooks[hookType] as? [[String: Any]] ?? []
 
-        let newEntry: [String: Any] = [
-            "matcher": "*",
-            "hooks": [[
-                "type": "command",
-                "command": bridgeInstallPath,
-                "timeout": 86400
-            ]]
-        ]
-        permissionHooks.insert(newEntry, at: 0)
-        hooks["PermissionRequest"] = permissionHooks
+            entries.removeAll { entry in
+                guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
+                return entryHooks.contains { ($0["command"] as? String)?.contains(hookIdentifier) == true }
+            }
+
+            let newEntry: [String: Any] = [
+                "matcher": "*",
+                "hooks": [[
+                    "type": "command",
+                    "command": bridgeInstallPath,
+                    "timeout": timeout,
+                ] as [String: Any]],
+            ]
+            entries.insert(newEntry, at: 0)
+            hooks[hookType] = entries
+        }
+
         settings["hooks"] = hooks
-
         let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: URL(fileURLWithPath: settingsPath))
     }
@@ -74,13 +100,15 @@ enum HookInstaller {
         let path = settingsPath ?? claudeSettingsPath
         guard let data = FileManager.default.contents(atPath: path),
               let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let hooks = settings["hooks"] as? [String: Any],
-              let permHooks = hooks["PermissionRequest"] as? [[String: Any]] else {
+              let hooks = settings["hooks"] as? [String: Any] else {
             return false
         }
-        return permHooks.contains { entry in
-            guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
-            return entryHooks.contains { ($0["command"] as? String)?.contains(hookIdentifier) == true }
+        return requiredHookTypes.allSatisfy { hookType, _ in
+            guard let entries = hooks[hookType] as? [[String: Any]] else { return false }
+            return entries.contains { entry in
+                guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
+                return entryHooks.contains { ($0["command"] as? String)?.contains(hookIdentifier) == true }
+            }
         }
     }
 
@@ -97,11 +125,29 @@ enum HookInstaller {
     FALLBACK='{"decision":"ask"}'
     [ ! -S "$SOCK" ] && { echo "$FALLBACK"; exit 0; }
     INPUT=$(cat)
-    if command -v socat >/dev/null 2>&1; then
-      RESPONSE=$(echo "$INPUT" | socat -t 30 - UNIX-CONNECT:"$SOCK" 2>/dev/null) || { echo "$FALLBACK"; exit 0; }
-    else
-      RESPONSE=$(echo "$INPUT" | nc -U -w 30 "$SOCK" 2>/dev/null) || { echo "$FALLBACK"; exit 0; }
-    fi
+    RESPONSE=$(printf '%s' "$INPUT" | python3 -c '
+    import socket, sys, json
+    data = sys.stdin.buffer.read()
+    hook_type = json.loads(data).get("hook_event_name", "")
+    timeout = 86400 if hook_type == "PermissionRequest" else 45
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.settimeout(timeout)
+    try:
+        sock.connect("/tmp/agent-island.sock")
+        sock.sendall(data)
+        sock.shutdown(socket.SHUT_WR)
+        resp = b""
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            resp += chunk
+        sys.stdout.buffer.write(resp)
+    except Exception:
+        pass
+    finally:
+        sock.close()
+    ' 2>/dev/null) || RESPONSE=""
     [ -n "$RESPONSE" ] && echo "$RESPONSE" || echo "$FALLBACK"
     """
 }

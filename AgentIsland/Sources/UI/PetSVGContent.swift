@@ -9,7 +9,6 @@ enum PetSVGContent {
         @keyframes breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(0.2px); } }
         @keyframes zUp { 0% { opacity: 0; transform: translate(0, 0); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(0.8px, -2.5px); } }
       </style>
-      <rect width="16" height="16" fill="#000000"/>
       <g class="body">
         <rect x="5" y="4" width="1" height="1" fill="#f5f5dc"/><rect x="6" y="4" width="1" height="1" fill="#fffff0"/><rect x="7" y="4" width="1" height="1" fill="#fffff0"/><rect x="8" y="4" width="1" height="1" fill="#fffff0"/><rect x="9" y="4" width="1" height="1" fill="#fffff0"/><rect x="10" y="4" width="1" height="1" fill="#fffff0"/><rect x="11" y="4" width="1" height="1" fill="#f5f5dc"/>
         <rect x="5" y="5" width="1" height="1" fill="#fffff0"/><rect x="6" y="5" width="1" height="1" fill="#ffffff"/><rect x="7" y="5" width="1" height="1" fill="#ffffff"/><rect x="8" y="5" width="1" height="1" fill="#ffffff"/><rect x="9" y="5" width="1" height="1" fill="#ffffff"/><rect x="10" y="5" width="1" height="1" fill="#ffffff"/><rect x="11" y="5" width="1" height="1" fill="#fffff0"/>
@@ -40,7 +39,6 @@ enum PetSVGContent {
         @keyframes stepR { 0%, 100% { transform: translateX(0) translateY(0); } 50% { transform: translateX(0.3px) translateY(0.3px); } }
         @keyframes swing { 0% { transform: rotate(-5deg); } 100% { transform: rotate(5deg); } }
       </style>
-      <rect width="16" height="16" fill="#000000"/>
       <g class="body">
         <rect x="5" y="3" width="1" height="1" fill="#f5f5dc"/><rect x="6" y="3" width="1" height="1" fill="#fffff0"/><rect x="7" y="3" width="1" height="1" fill="#fffff0"/><rect x="8" y="3" width="1" height="1" fill="#fffff0"/><rect x="9" y="3" width="1" height="1" fill="#fffff0"/><rect x="10" y="3" width="1" height="1" fill="#fffff0"/><rect x="11" y="3" width="1" height="1" fill="#f5f5dc"/>
         <rect x="5" y="4" width="1" height="1" fill="#fffff0"/><rect x="6" y="4" width="1" height="1" fill="#ffffff"/><rect x="7" y="4" width="1" height="1" fill="#ffffff"/><rect x="8" y="4" width="1" height="1" fill="#ffffff"/><rect x="9" y="4" width="1" height="1" fill="#ffffff"/><rect x="10" y="4" width="1" height="1" fill="#ffffff"/><rect x="11" y="4" width="1" height="1" fill="#fffff0"/>
@@ -69,7 +67,6 @@ enum PetSVGContent {
         @keyframes kneadR { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-0.3px, 0); } 75% { transform: translate(0.3px, 0.2px); } }
         @keyframes roll { 0%, 100% { transform: translateX(0) rotate(0deg); } 25% { transform: translateX(-0.5px) rotate(-8deg); } 75% { transform: translateX(0.5px) rotate(8deg); } }
       </style>
-      <rect width="16" height="16" fill="#000000"/>
       <g class="body">
         <rect x="5" y="2" width="1" height="1" fill="#f5f5dc"/><rect x="6" y="2" width="1" height="1" fill="#fffff0"/><rect x="7" y="2" width="1" height="1" fill="#fffff0"/><rect x="8" y="2" width="1" height="1" fill="#fffff0"/><rect x="9" y="2" width="1" height="1" fill="#fffff0"/><rect x="10" y="2" width="1" height="1" fill="#fffff0"/><rect x="11" y="2" width="1" height="1" fill="#f5f5dc"/>
         <rect x="5" y="3" width="1" height="1" fill="#fffff0"/><rect x="6" y="3" width="1" height="1" fill="#ffffff"/><rect x="7" y="3" width="1" height="1" fill="#ffffff"/><rect x="8" y="3" width="1" height="1" fill="#ffffff"/><rect x="9" y="3" width="1" height="1" fill="#ffffff"/><rect x="10" y="3" width="1" height="1" fill="#ffffff"/><rect x="11" y="3" width="1" height="1" fill="#fffff0"/>
@@ -98,7 +95,6 @@ enum PetSVGContent {
         @keyframes wobble { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-3deg); } 40% { transform: rotate(3deg); } 60% { transform: rotate(-1deg); } 80% { transform: rotate(1deg); } }
         @keyframes lookLeft { 0%, 40% { transform: translateX(0); } 50% { transform: translateX(-0.3px); } 60%, 100% { transform: translateX(0); } }
       </style>
-      <rect width="16" height="16" fill="#000000"/>
       <g class="body">
         <rect x="5" y="3" width="1" height="1" fill="#f5f5dc"/><rect x="6" y="3" width="1" height="1" fill="#fffff0"/><rect x="7" y="3" width="1" height="1" fill="#fffff0"/><rect x="8" y="3" width="1" height="1" fill="#fffff0"/><rect x="9" y="3" width="1" height="1" fill="#fffff0"/><rect x="10" y="3" width="1" height="1" fill="#fffff0"/><rect x="11" y="3" width="1" height="1" fill="#f5f5dc"/>
         <rect x="5" y="4" width="1" height="1" fill="#fffff0"/><rect x="6" y="4" width="1" height="1" fill="#ffffff"/><rect x="7" y="4" width="1" height="1" fill="#ffffff"/><rect x="8" y="4" width="1" height="1" fill="#ffffff"/><rect x="9" y="4" width="1" height="1" fill="#ffffff"/><rect x="10" y="4" width="1" height="1" fill="#ffffff"/><rect x="11" y="4" width="1" height="1" fill="#fffff0"/>
@@ -118,7 +114,6 @@ enum PetSVGContent {
 
     static let socketFace = """
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="256" height="256" shape-rendering="crispEdges">
-      <rect width="16" height="16" fill="#000000"/>
       <rect x="4" y="3" width="1" height="1" fill="#f5f5dc"/><rect x="5" y="3" width="1" height="1" fill="#fffff0"/><rect x="6" y="3" width="1" height="1" fill="#fffff0"/><rect x="7" y="3" width="1" height="1" fill="#fffff0"/><rect x="8" y="3" width="1" height="1" fill="#fffff0"/><rect x="9" y="3" width="1" height="1" fill="#fffff0"/><rect x="10" y="3" width="1" height="1" fill="#fffff0"/><rect x="11" y="3" width="1" height="1" fill="#f5f5dc"/>
       <rect x="4" y="4" width="1" height="1" fill="#fffff0"/><rect x="5" y="4" width="1" height="1" fill="#ffffff"/><rect x="6" y="4" width="1" height="1" fill="#ffffff"/><rect x="7" y="4" width="1" height="1" fill="#ffffff"/><rect x="8" y="4" width="1" height="1" fill="#ffffff"/><rect x="9" y="4" width="1" height="1" fill="#ffffff"/><rect x="10" y="4" width="1" height="1" fill="#ffffff"/><rect x="11" y="4" width="1" height="1" fill="#fffff0"/>
       <rect x="4" y="5" width="1" height="1" fill="#fffff0"/><rect x="5" y="5" width="1" height="1" fill="#ffffff"/><rect x="6" y="5" width="1" height="1" fill="#ffffff"/><rect x="7" y="5" width="1" height="1" fill="#ffffff"/><rect x="8" y="5" width="1" height="1" fill="#ffffff"/><rect x="9" y="5" width="1" height="1" fill="#ffffff"/><rect x="10" y="5" width="1" height="1" fill="#ffffff"/><rect x="11" y="5" width="1" height="1" fill="#fffff0"/>

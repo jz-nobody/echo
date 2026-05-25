@@ -48,6 +48,15 @@ final class ConfirmationQueue {
         }
     }
 
+    func removeItem(id: String) {
+        items.removeAll { $0.id == id }
+        if items.isEmpty {
+            currentIndex = 0
+        } else {
+            currentIndex = min(currentIndex, items.count - 1)
+        }
+    }
+
     func advance() {
         if currentIndex + 1 < items.count {
             currentIndex += 1

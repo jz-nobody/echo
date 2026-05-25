@@ -87,9 +87,30 @@ struct SessionFileParserTests {
         #expect(agent.status == .idle)
     }
 
-    @Test("toAgentSession maps non-idle status to executing")
-    func toAgentSessionExecutingStatus() {
+    @Test("toAgentSession maps nil status to idle")
+    func toAgentSessionNilStatusMapsToIdle() {
         let session = SessionFileParser.parse(data: validJSON)!
+        let agent = SessionFileParser.toAgentSession(session)
+
+        #expect(agent.status == .idle)
+    }
+
+    @Test("toAgentSession maps explicit non-idle status to executing")
+    func toAgentSessionExplicitActiveStatus() {
+        let json = """
+        {
+          "pid": 12345,
+          "sessionId": "test-active",
+          "cwd": "/Users/dev/project",
+          "startedAt": 1779212717359,
+          "version": "2.1.133",
+          "peerProtocol": 1,
+          "kind": "interactive",
+          "entrypoint": "cli",
+          "status": "active"
+        }
+        """.data(using: .utf8)!
+        let session = SessionFileParser.parse(data: json)!
         let agent = SessionFileParser.toAgentSession(session)
 
         #expect(agent.status == .executing)

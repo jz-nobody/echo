@@ -36,6 +36,7 @@ final class SessionEventDetector {
         detectConfirmationArrived(previous: previous, current: snapshot, into: &events)
         detectError(previous: previous, current: snapshot, into: &events)
         detectReconnected(previous: previous, current: snapshot, into: &events)
+        detectStatusTransitionSounds(previous: previous, current: snapshot, into: &events)
 
         return events
     }
@@ -151,6 +152,27 @@ final class SessionEventDetector {
         let reconnected = current.adaptorOnline.subtracting(previous.adaptorOnline)
         if !reconnected.isEmpty {
             events.append(.reconnected)
+        }
+    }
+
+    private func detectStatusTransitionSounds(
+        previous: Snapshot,
+        current: Snapshot,
+        into events: inout [SoundEvent]
+    ) {
+        for id in previous.sessionIDs.intersection(current.sessionIDs) {
+            guard let prev = previous.sessionStatuses[id],
+                  let curr = current.sessionStatuses[id],
+                  prev != curr else { continue }
+
+
+            if prev == .compacting && curr != .compacting {
+                events.append(.compactingCompleted)
+            } else if prev != .waitingConfirmation && curr == .waitingConfirmation {
+                events.append(.askingUser)
+            } else if prev.isActive && (curr == .completed || curr == .idle) {
+                events.append(.runningCompleted)
+            }
         }
     }
 }

@@ -13,12 +13,11 @@ final class WindowController: NSObject {
     private var hostingView: NSHostingView<AnyView>?
     private var barHostingView: NSHostingView<AnyView>?
     private var notchInfo: NotchInfo?
-    private var fullscreenObserver: NSObjectProtocol?
     private var displayChangeObserver: NSObjectProtocol?
+    private var spaceChangeObserver: NSObjectProtocol?
     private var globalClickMonitor: Any?
     private lazy var settingsWindowController = SettingsWindowController(settingsStore: settingsStore)
 
-    private let barWidth: CGFloat = 200
     private let barHeight: CGFloat = 32
     private var suppressMouseExit = false
     private var isFullyCollapsed = true
@@ -37,11 +36,13 @@ final class WindowController: NSObject {
     }
 
     func showCompactBar() {
-        let info = NotchDetector.detect()
+        let info = detectNotch()
         self.notchInfo = info
         let panel = createPanel(notchInfo: info)
+        let panelHeight = info.notchHeight
+        let barWidth = info.barWidth
 
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: barWidth, height: barHeight))
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: barWidth, height: panelHeight))
 
         let rootView = NotchRootView(
             panelState: panelState, sessionManager: sessionManager,
@@ -49,12 +50,22 @@ final class WindowController: NSObject {
             frontmostAppMonitor: frontmostAppMonitor, windowActivator: windowActivator
         )
         let hosting = NSHostingView(rootView: AnyView(rootView))
-        hosting.frame = NSRect(x: 0, y: 0, width: barWidth, height: barHeight)
+        hosting.frame = NSRect(x: 0, y: 0, width: barWidth, height: panelHeight)
         container.addSubview(hosting)
 
-        let barView = CompactBarWrapper(sessionManager: sessionManager)
+        let barView = CompactBarWrapper(sessionManager: sessionManager, onTap: { [weak self] in
+            self?.panelState.expand()
+        }, onClose: { [weak self] in
+            guard let self else { return }
+            self.panelState.showQuitConfirmation = true
+            self.panelState.expand()
+        }, onCloseHover: { [weak self] hovering in
+            if hovering {
+                self?.panelState.cancelPendingExpand()
+            }
+        })
         let barHosting = NSHostingView(rootView: AnyView(barView))
-        barHosting.frame = NSRect(x: 0, y: 0, width: barWidth, height: barHeight)
+        barHosting.frame = NSRect(x: 0, y: 0, width: barWidth, height: panelHeight)
         container.addSubview(barHosting)
 
         panel.contentView = container
@@ -63,23 +74,27 @@ final class WindowController: NSObject {
         self.panel = panel
         panel.orderFrontRegardless()
         setupTracking(panel: panel); setupKeyMonitor()
-        setupFullscreenObserver(); setupDisplayChangeObserver()
+        setupDisplayChangeObserver(); setupSpaceChangeObserver()
+        observeNotchOffsetChanges()
         if settingsStore.dismissOnClickOutside {
             installGlobalClickMonitor()
         }
     }
 
     private func createPanel(notchInfo: NotchInfo) -> NSPanel {
-        let panel = NSPanel(
+        let panel = NotchPanel(
             contentRect: NSRect(origin: NSPoint(x: notchInfo.barOriginX, y: notchInfo.barOriginY),
-                                size: NSSize(width: barWidth, height: barHeight)),
+                                size: NSSize(width: notchInfo.barWidth, height: notchInfo.notchHeight)),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
-        panel.level = .statusBar + 1
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.level = .statusBar
+        panel.collectionBehavior = [.fullScreenAuxiliary, .canJoinAllSpaces, .ignoresCycle, .stationary]
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = false
         panel.isMovable = false; panel.hidesOnDeactivate = false
-        panel.ignoresMouseEvents = false; panel.isFloatingPanel = true
+        panel.titleVisibility = .hidden; panel.titlebarAppearsTransparent = true
+        panel.ignoresMouseEvents = false
         panel.acceptsMouseMovedEvents = true
         return panel
     }
@@ -109,7 +124,6 @@ final class WindowController: NSObject {
             guard self.panelState.isExpanded else { return event }
 
             if event.keyCode == 53 {
-                self.panelState.confirmationsActive = false
                 self.panelState.collapse()
                 return nil
             }
@@ -161,23 +175,7 @@ final class WindowController: NSObject {
                 sessions: sessionManager.sessions
             )
             if confirmationQueue.isEmpty {
-                panelState.confirmationsActive = false
                 panelState.collapse()
-            }
-        }
-    }
-
-    private func setupFullscreenObserver() {
-        fullscreenObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, let panel = self.panel else { return }
-                let shouldHide = self.settingsStore.hideInFullscreen
-                    && self.frontmostAppMonitor.isFullscreenAppActive()
-                panel.setIsVisible(!shouldHide)
             }
         }
     }
@@ -190,8 +188,54 @@ final class WindowController: NSObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.panel != nil else { return }
-                self.notchInfo = NotchDetector.detect()
+                self.notchInfo = self.detectNotch()
                 self.updatePanelFrame()
+            }
+        }
+    }
+
+    private func detectNotch() -> NotchInfo {
+        NotchDetector.detect(
+            widthOffset: settingsStore.notchWidthOffset,
+            heightOffset: settingsStore.notchHeightOffset
+        )
+    }
+
+    private func observeNotchOffsetChanges() {
+        withObservationTracking {
+            _ = settingsStore.notchWidthOffset
+            _ = settingsStore.notchHeightOffset
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.panel != nil else { return }
+                self.notchInfo = self.detectNotch()
+                self.repositionPanel()
+                self.observeNotchOffsetChanges()
+            }
+        }
+    }
+
+    private func repositionPanel() {
+        guard let panel, let notchInfo else { return }
+        let frame = NSRect(
+            origin: NSPoint(x: notchInfo.barOriginX, y: notchInfo.barOriginY),
+            size: NSSize(width: notchInfo.barWidth, height: notchInfo.notchHeight)
+        )
+        if !panelState.isExpanded {
+            panel.setFrame(frame, display: true)
+            hostingView?.frame = NSRect(origin: .zero, size: frame.size)
+            barHostingView?.frame = NSRect(origin: .zero, size: frame.size)
+        }
+    }
+
+    private func setupSpaceChangeObserver() {
+        spaceChangeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.panel?.orderFrontRegardless()
             }
         }
     }
@@ -202,7 +246,6 @@ final class WindowController: NSObject {
                 guard let self, let panel = self.panel else { return }
                 guard self.panelState.isExpanded else { return }
                 if !panel.frame.contains(NSEvent.mouseLocation) {
-                    self.panelState.confirmationsActive = false
                     self.panelState.collapse()
                 }
             }
@@ -213,6 +256,7 @@ final class WindowController: NSObject {
         guard let panel, let notchInfo, let hostingView else { return }
 
         let isExpanded = panelState.isExpanded
+        let barWidth = notchInfo.barWidth
 
         if isExpanded {
             barHostingView?.isHidden = true
@@ -227,7 +271,7 @@ final class WindowController: NSObject {
                 notchInfo.screenFrame.minX + 8,
                 min(barCenterX - targetWidth / 2, notchInfo.screenFrame.maxX - targetWidth - 8)
             )
-            let newOriginY = notchInfo.barOriginY + barHeight - targetHeight
+            let newOriginY = notchInfo.barOriginY + notchInfo.notchHeight - targetHeight
 
             if isFullyCollapsed {
                 isFullyCollapsed = false
@@ -252,13 +296,14 @@ final class WindowController: NSObject {
             )
         } else {
             isFullyCollapsed = true
-            hostingView.frame = NSRect(x: 0, y: 0, width: barWidth, height: barHeight)
+            let collapsedHeight = notchInfo.notchHeight
+            hostingView.frame = NSRect(x: 0, y: 0, width: barWidth, height: collapsedHeight)
             panel.setFrame(
                 NSRect(x: notchInfo.barOriginX, y: notchInfo.barOriginY,
-                       width: barWidth, height: barHeight),
+                       width: barWidth, height: collapsedHeight),
                 display: true
             )
-            barHostingView?.frame = NSRect(x: 0, y: 0, width: barWidth, height: barHeight)
+            barHostingView?.frame = NSRect(x: 0, y: 0, width: barWidth, height: collapsedHeight)
             barHostingView?.isHidden = false
         }
     }
@@ -266,15 +311,37 @@ final class WindowController: NSObject {
 
 private struct CompactBarWrapper: View {
     var sessionManager: SessionManager
+    var onTap: (() -> Void)? = nil
+    var onClose: (() -> Void)? = nil
+    var onCloseHover: ((Bool) -> Void)? = nil
 
     var body: some View {
         CompactBarView(
             status: sessionManager.aggregateStatus,
-            sessionCount: sessionManager.activeSessionCount,
-            elapsedTime: elapsedTimeText,
-            isOffline: sessionManager.health.isAnyOffline
+            sessionCount: sessionManager.sessions.count,
+            elapsedTime: nil,
+            isOffline: sessionManager.health.isAnyOffline,
+            confirmationTitle: firstConfirmationTitle,
+            confirmationCount: totalConfirmationCount,
+            onClose: onClose,
+            onCloseHover: onCloseHover
         )
-        .frame(width: DesignTokens.compactBarWidth, height: DesignTokens.compactBarHeight)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture { onTap?() }
+    }
+
+    private var firstConfirmationTitle: String? {
+        for (_, confs) in sessionManager.pendingConfirmations {
+            if let first = confs.first {
+                return first.title
+            }
+        }
+        return nil
+    }
+
+    private var totalConfirmationCount: Int {
+        sessionManager.pendingConfirmations.values.reduce(0) { $0 + $1.count }
     }
 
     private var elapsedTimeText: String? {
@@ -288,5 +355,14 @@ private struct CompactBarWrapper: View {
         if elapsed < 60 { return "\(elapsed)s" }
         if elapsed < 3600 { return "\(elapsed / 60)m" }
         return "\(elapsed / 3600)h\((elapsed % 3600) / 60)m"
+    }
+}
+
+private final class NotchPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
     }
 }

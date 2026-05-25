@@ -20,8 +20,8 @@ struct IPCProtocolTests {
         #expect(decoded.type == "PermissionRequest")
         #expect(decoded.sessionId == "abc-123")
         #expect(decoded.toolName == "Bash")
-        #expect(decoded.toolInput["command"] == AnyCodable("ls -la"))
-        #expect(decoded.toolInput["timeout"] == AnyCodable(120000))
+        #expect(decoded.toolInput?["command"] == AnyCodable("ls -la"))
+        #expect(decoded.toolInput?["timeout"] == AnyCodable(120000))
         #expect(decoded.permissionLevel == "default")
     }
 
@@ -75,6 +75,26 @@ struct IPCProtocolTests {
         #expect(json["permission_level"] == nil || json["permission_level"] is NSNull)
     }
 
+    @Test("HookMessage decode without tool fields succeeds")
+    func decodeHookMessageWithoutToolFields() throws {
+        let json = """
+        {"hook_event_name":"PreCompact","session_id":"s99"}
+        """
+        let decoded = try IPCProtocol.decodeHookMessage(from: Data(json.utf8))
+        #expect(decoded.type == "PreCompact")
+        #expect(decoded.sessionId == "s99")
+        #expect(decoded.toolName == nil)
+        #expect(decoded.toolInput == nil)
+        #expect(decoded.permissionLevel == nil)
+    }
+
+    @Test("HookResponse.empty encodes to empty JSON object")
+    func hookResponseEmptyEncoding() throws {
+        let data = try JSONEncoder().encode(HookResponse.empty)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        #expect(json.isEmpty)
+    }
+
     @Test("decode invalid JSON throws")
     func decodeInvalidJSON() {
         let badData = Data("not json".utf8)
@@ -88,5 +108,31 @@ struct IPCProtocolTests {
         let resp = HookResponse(decision: "ask", reason: nil)
         let data = try IPCProtocol.encode(resp)
         #expect(data.last == 0x0A)
+    }
+
+    @Test("HookResponse allow encodes to Claude Code hookSpecificOutput format")
+    func hookResponseAllowFormat() throws {
+        let allow = HookResponse(decision: "allow", reason: nil)
+        let data = try JSONEncoder().encode(allow)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        #expect(json["continue"] as? Bool == true)
+        #expect(json["suppressOutput"] as? Bool == true)
+        let output = json["hookSpecificOutput"] as! [String: Any]
+        #expect(output["hookEventName"] as? String == "PermissionRequest")
+        let decision = output["decision"] as! [String: Any]
+        #expect(decision["behavior"] as? String == "allow")
+    }
+
+    @Test("HookResponse deny encodes with message")
+    func hookResponseDenyFormat() throws {
+        let deny = HookResponse(decision: "deny", reason: "Not allowed")
+        let data = try JSONEncoder().encode(deny)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        let output = json["hookSpecificOutput"] as! [String: Any]
+        let decision = output["decision"] as! [String: Any]
+        #expect(decision["behavior"] as? String == "deny")
+        #expect(decision["message"] as? String == "Not allowed")
     }
 }

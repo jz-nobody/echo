@@ -47,7 +47,7 @@ struct PanelStateTests {
     }
 
     @MainActor
-    @Test("mouseExited cancels pending expand and collapses")
+    @Test("mouseExited cancels pending expand and keeps collapsed")
     func mouseExitedCancels() {
         let state = PanelState(settingsStore: makeStore(hoverDelay: 1.0))
         state.mouseEntered()
@@ -56,59 +56,68 @@ struct PanelStateTests {
     }
 
     @MainActor
-    @Test("autoExpand sets expanded and confirmationsActive")
-    func autoExpandSetsExpandedAndFlag() {
-        let state = PanelState(settingsStore: makeStore())
+    @Test("autoExpand sets expanded and starts auto-collapse timer")
+    func autoExpandSetsExpanded() {
+        let state = PanelState(settingsStore: makeStore(), autoCollapseDelay: 10.0)
         state.autoExpand()
         #expect(state.isExpanded == true)
-        #expect(state.confirmationsActive == true)
     }
 
     @MainActor
-    @Test("mouseExited stays expanded when confirmations active")
-    func mouseExitedStaysExpandedWhenConfirmationsActive() {
-        let state = PanelState(settingsStore: makeStore())
+    @Test("autoExpand auto-collapses after delay")
+    func autoExpandAutoCollapses() {
+        let state = PanelState(settingsStore: makeStore(), autoCollapseDelay: 0.1)
         state.autoExpand()
-        state.mouseExited()
         #expect(state.isExpanded == true)
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
+        #expect(state.isExpanded == false)
     }
 
     @MainActor
-    @Test("mouseExited starts delayed collapse, does not collapse immediately")
-    func mouseExitedDelayedCollapse() {
-        let store = makeStore()
-        store.autoCollapseOnMouseExit = true
-        let state = PanelState(settingsStore: store, autoCollapseDelay: 5.0)
-        state.expand()
-        state.mouseExited()
-        #expect(state.isExpanded == true)
-    }
-
-    @MainActor
-    @Test("mouseEntered cancels pending collapse timer")
-    func mouseEnteredCancelsCollapse() {
-        let store = makeStore()
-        store.autoCollapseOnMouseExit = true
-        let state = PanelState(settingsStore: store, autoCollapseDelay: 0.1)
-        state.expand()
-        state.mouseExited()
-        #expect(state.isExpanded == true)
+    @Test("mouseEntered cancels auto-collapse timer")
+    func mouseEnteredCancelsAutoCollapse() {
+        let state = PanelState(settingsStore: makeStore(), autoCollapseDelay: 0.1)
+        state.autoExpand()
         state.mouseEntered()
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
         #expect(state.isExpanded == true)
     }
 
     @MainActor
-    @Test("mouseExited collapses panel after delay elapses")
-    func mouseExitedCollapsesAfterDelay() {
+    @Test("mouseExited collapses immediately after autoExpand")
+    func mouseExitedAfterAutoExpand() {
         let store = makeStore()
         store.autoCollapseOnMouseExit = true
-        let state = PanelState(settingsStore: store, autoCollapseDelay: 0.1)
+        let state = PanelState(settingsStore: store, mouseExitDelay: 0.1, autoCollapseDelay: 10.0)
+        state.autoExpand()
+        state.mouseEntered()
+        state.mouseExited()
+        #expect(state.isExpanded == false)
+    }
+
+    @MainActor
+    @Test("mouseExited collapses immediately")
+    func mouseExitedCollapsesImmediately() {
+        let store = makeStore()
+        store.autoCollapseOnMouseExit = true
+        let state = PanelState(settingsStore: store, mouseExitDelay: 0.1)
         state.expand()
         state.mouseExited()
-        #expect(state.isExpanded == true)
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
         #expect(state.isExpanded == false)
+    }
+
+    @MainActor
+    @Test("mouseEntered after mouseExited re-expands panel")
+    func mouseEnteredReexpands() {
+        let store = makeStore()
+        store.autoCollapseOnMouseExit = true
+        let state = PanelState(settingsStore: store, mouseExitDelay: 0.1)
+        state.expand()
+        state.mouseExited()
+        #expect(state.isExpanded == false)
+        state.mouseEntered()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
+        #expect(state.isExpanded == true)
     }
 
     @MainActor
@@ -116,7 +125,7 @@ struct PanelStateTests {
     func mouseExitedNoCollapseWhenDisabled() {
         let store = makeStore()
         store.autoCollapseOnMouseExit = false
-        let state = PanelState(settingsStore: store, autoCollapseDelay: 0.1)
+        let state = PanelState(settingsStore: store, mouseExitDelay: 0.1)
         state.expand()
         state.mouseExited()
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))

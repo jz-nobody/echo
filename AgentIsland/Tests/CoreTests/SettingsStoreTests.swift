@@ -21,7 +21,7 @@ struct SettingsStoreTests {
         #expect(store.hoverToExpand == true)
         #expect(store.hoverDelay == 0.15)
         #expect(store.smartSuppression == true)
-        #expect(store.hideInFullscreen == true)
+        #expect(store.hideInFullscreen == false)
         #expect(store.hideWhenNoActiveSessions == false)
         #expect(store.autoCollapseOnMouseExit == true)
         #expect(store.autoReminderDuration == 5.0)
