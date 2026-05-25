@@ -47,6 +47,10 @@ enum HookInstaller {
         ("UserPromptSubmit", 5),
         ("PreCompact", 5),
         ("Stop", 5),
+        ("SessionStart", 5),
+        ("StopFailure", 5),
+        ("SubagentStart", 5),
+        ("SubagentStop", 5),
     ]
 
     static func registerHook(settingsPath: String) throws {

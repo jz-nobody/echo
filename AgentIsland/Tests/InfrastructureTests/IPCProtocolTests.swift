@@ -135,4 +135,40 @@ struct IPCProtocolTests {
         #expect(decision["behavior"] as? String == "deny")
         #expect(decision["message"] as? String == "Not allowed")
     }
+
+    @Test("HookResponse.question encodes updatedInput in decision")
+    func hookResponseQuestionFormat() throws {
+        let originalInput: [String: AnyCodable] = [
+            "questions": AnyCodable([
+                ["question": "Which color?", "options": [["label": "Red"], ["label": "Blue"]]]
+            ])
+        ]
+        let resp = HookResponse.question(answers: ["Which color?": "Red"], originalInput: originalInput)
+        let data = try JSONEncoder().encode(resp)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        let output = json["hookSpecificOutput"] as! [String: Any]
+        let decision = output["decision"] as! [String: Any]
+        #expect(decision["behavior"] as? String == "allow")
+
+        let updatedInput = decision["updatedInput"] as! [String: Any]
+        let answers = updatedInput["answers"] as! [String: Any]
+        #expect(answers["Which color?"] as? String == "Red")
+        #expect(updatedInput["questions"] != nil)
+    }
+
+    @Test("HookResponse with updatedInput decode roundtrip")
+    func hookResponseUpdatedInputRoundtrip() throws {
+        let originalInput: [String: AnyCodable] = [
+            "questions": AnyCodable([["question": "Pick one", "options": [["label": "A"]]]])
+        ]
+        let resp = HookResponse.question(answers: ["Pick one": "A"], originalInput: originalInput)
+        let data = try IPCProtocol.encode(resp)
+        let decoded = try IPCProtocol.decodeHookResponse(from: data)
+
+        #expect(decoded.decision == "allow")
+        #expect(decoded.updatedInput != nil)
+        let answers = decoded.updatedInput?["answers"]?.value as? [String: Any]
+        #expect(answers?["Pick one"] as? String == "A")
+    }
 }

@@ -124,18 +124,23 @@ final class SessionManager {
     private func applyHookStatus(from notification: Notification) {
         guard let info = notification.userInfo,
               let sessionId = info["sessionId"] as? String,
-              let status = info["status"] as? SessionStatus else {
-            DebugLog.log("APPLY-HOOK: GUARD FAILED - info=\(notification.userInfo.debugDescription)")
-            return
-        }
-        if let idx = sessions.firstIndex(where: { $0.id == sessionId }) {
-            let prev = sessions[idx].status
-            sessions[idx].status = status
-            DebugLog.log("APPLY-HOOK: session=\(sessionId.prefix(8)) \(prev.displayText)→\(status.displayText) idx=\(idx)")
-            playTransitionSound(from: prev, to: status)
+              let status = info["status"] as? SessionStatus else { return }
+
+        let prev: SessionStatus
+        if let notifiedPrev = info["previousStatus"] as? SessionStatus {
+            prev = notifiedPrev
+        } else if let idx = sessions.firstIndex(where: { $0.id == sessionId }) {
+            prev = sessions[idx].status
         } else {
-            DebugLog.log("APPLY-HOOK: session=\(sessionId.prefix(8)) NOT FOUND in sessions (count=\(sessions.count))")
+            prev = .idle
         }
+
+        if let idx = sessions.firstIndex(where: { $0.id == sessionId }) {
+            sessions[idx].status = status
+        }
+
+        playTransitionSound(from: prev, to: status)
+
         if status != .waitingConfirmation && pendingConfirmations[sessionId] != nil {
             pendingConfirmations.removeValue(forKey: sessionId)
         }
@@ -152,7 +157,10 @@ final class SessionManager {
         } else {
             event = nil
         }
-        if let event { soundPlayer?.play(event) }
+        if let event {
+            NSLog("[AgentIsland] Sound: \(prev.displayText) → \(status.displayText) → play \(event.rawValue)")
+            soundPlayer?.play(event)
+        }
     }
 
     func pollOnce() async {
@@ -192,8 +200,7 @@ final class SessionManager {
         }
 
         let filteredSessions = SessionFilter.apply(to: newSessions, settings: settingsStore)
-        self.sessions = filteredSessions
-        self.pendingConfirmations = newConfirmations
+        mergeSessions(filteredSessions, confirmations: newConfirmations)
 
         let events = eventDetector.detect(
             sessions: newSessions,
@@ -205,6 +212,34 @@ final class SessionManager {
         }
 
         checkIdleReminders(sessions: newSessions)
+    }
+
+    private func mergeSessions(
+        _ discovered: [AgentSession],
+        confirmations: [String: [PendingConfirmation]]
+    ) {
+        let discoveredMap = Dictionary(uniqueKeysWithValues: discovered.map { ($0.id, $0) })
+        let discoveredIDs = Set(discovered.map(\.id))
+
+        sessions.removeAll { !discoveredIDs.contains($0.id) }
+
+        for i in sessions.indices {
+            guard let disc = discoveredMap[sessions[i].id] else { continue }
+            let hookStatus = sessions[i].status
+            sessions[i] = disc
+            if hookStatus.priority > disc.status.priority {
+                sessions[i].status = hookStatus
+            }
+        }
+
+        let existingIDs = Set(sessions.map(\.id))
+        for id in discoveredIDs.subtracting(existingIDs) {
+            if let session = discoveredMap[id] {
+                sessions.append(session)
+            }
+        }
+
+        self.pendingConfirmations = confirmations
     }
 
     private func checkIdleReminders(sessions: [AgentSession]) {

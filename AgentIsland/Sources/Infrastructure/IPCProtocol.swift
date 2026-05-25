@@ -19,6 +19,13 @@ struct HookMessage: Codable, Sendable, Equatable {
 struct HookResponse: Sendable, Equatable {
     let decision: String?
     let reason: String?
+    let updatedInput: [String: AnyCodable]?
+
+    init(decision: String?, reason: String?, updatedInput: [String: AnyCodable]? = nil) {
+        self.decision = decision
+        self.reason = reason
+        self.updatedInput = updatedInput
+    }
 
     static let empty = HookResponse(decision: nil, reason: nil)
 
@@ -28,6 +35,12 @@ struct HookResponse: Sendable, Equatable {
         } else {
             return HookResponse(decision: "deny", reason: message ?? "Denied via Agent Island")
         }
+    }
+
+    static func question(answers: [String: String], originalInput: [String: AnyCodable]) -> HookResponse {
+        var updated = originalInput
+        updated["answers"] = AnyCodable(Dictionary(uniqueKeysWithValues: answers.map { ($0.key, $0.value) }))
+        return HookResponse(decision: "allow", reason: nil, updatedInput: updated)
     }
 }
 
@@ -46,7 +59,13 @@ extension HookResponse: Codable {
             try container.encode(true, forKey: .suppressOutput)
             var output: [String: Any] = ["hookEventName": "PermissionRequest"]
             if decision == "allow" {
-                output["decision"] = ["behavior": "allow"]
+                if let updatedInput {
+                    let inputData = try JSONEncoder().encode(updatedInput)
+                    let inputObj = try JSONSerialization.jsonObject(with: inputData)
+                    output["decision"] = ["behavior": "allow", "updatedInput": inputObj]
+                } else {
+                    output["decision"] = ["behavior": "allow"]
+                }
             } else {
                 var deny: [String: Any] = ["behavior": "deny"]
                 if let reason { deny["message"] = reason }
@@ -63,15 +82,23 @@ extension HookResponse: Codable {
         if let topDecision = try container.decodeIfPresent(String.self, forKey: .decision) {
             decision = topDecision
             reason = try container.decodeIfPresent(String.self, forKey: .reason)
+            updatedInput = nil
         } else if let output = try container.decodeIfPresent(AnyCodable.self, forKey: .hookSpecificOutput),
                   let dict = output.value as? [String: Any],
                   let decisionDict = dict["decision"] as? [String: Any],
                   let behavior = decisionDict["behavior"] as? String {
             decision = behavior
             reason = decisionDict["message"] as? String
+            if let inputDict = decisionDict["updatedInput"] as? [String: Any] {
+                let data = try JSONSerialization.data(withJSONObject: inputDict)
+                updatedInput = try JSONDecoder().decode([String: AnyCodable].self, from: data)
+            } else {
+                updatedInput = nil
+            }
         } else {
             decision = nil
             reason = nil
+            updatedInput = nil
         }
     }
 }

@@ -72,7 +72,8 @@ final class SoundPlayer: SoundPlayable {
     }
 
     private static let soundsDirectory: URL? = {
-        let execURL = Bundle.main.executableURL ?? URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
+        let execURL = (Bundle.main.executableURL ?? URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0]))
+            .resolvingSymlinksInPath()
         let projectRoot = execURL
             .deletingLastPathComponent() // → debug/
             .deletingLastPathComponent() // → arm64-apple-macosx/

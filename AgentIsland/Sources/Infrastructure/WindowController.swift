@@ -19,9 +19,12 @@ final class WindowController: NSObject {
     private lazy var settingsWindowController = SettingsWindowController(settingsStore: settingsStore)
 
     private let barHeight: CGFloat = 32
+    private let hitAreaTopPadding: CGFloat = 10
     private var suppressMouseExit = false
     private var isFullyCollapsed = true
     private var expandSequence = 0
+    private var collapseAnimation: NSAnimationContext?
+    private var isAnimatingCollapse = false
 
     init(sessionManager: SessionManager, settingsStore: SettingsStore, frontmostAppMonitor: FrontmostAppMonitor, windowActivator: WindowActivator) {
         self.sessionManager = sessionManager
@@ -259,7 +262,9 @@ final class WindowController: NSObject {
         let barWidth = notchInfo.barWidth
 
         if isExpanded {
-            barHostingView?.isHidden = true
+            isAnimatingCollapse = false
+            hostingView.alphaValue = 1
+            barHostingView?.alphaValue = 0
             let targetWidth = max(barWidth, settingsStore.maxPanelWidth)
             let contentH = panelState.expandedContentHeight
             let targetHeight = contentH > 0
@@ -283,8 +288,12 @@ final class WindowController: NSObject {
                     try? await Task.sleep(for: .milliseconds(400))
                     guard let self, self.expandSequence == seq else { return }
                     self.suppressMouseExit = false
-                    if let panel = self.panel, !panel.frame.contains(NSEvent.mouseLocation) {
-                        self.panelState.mouseExited()
+                    if let panel = self.panel {
+                        var checkFrame = panel.frame
+                        checkFrame.size.height += self.hitAreaTopPadding
+                        if !checkFrame.contains(NSEvent.mouseLocation) {
+                            self.panelState.mouseExited()
+                        }
                     }
                 }
             }
@@ -296,15 +305,37 @@ final class WindowController: NSObject {
             )
         } else {
             isFullyCollapsed = true
+            isAnimatingCollapse = true
             let collapsedHeight = notchInfo.notchHeight
-            hostingView.frame = NSRect(x: 0, y: 0, width: barWidth, height: collapsedHeight)
-            panel.setFrame(
-                NSRect(x: notchInfo.barOriginX, y: notchInfo.barOriginY,
-                       width: barWidth, height: collapsedHeight),
-                display: true
+            let targetFrame = NSRect(
+                x: notchInfo.barOriginX, y: notchInfo.barOriginY,
+                width: barWidth, height: collapsedHeight
             )
-            barHostingView?.frame = NSRect(x: 0, y: 0, width: barWidth, height: collapsedHeight)
-            barHostingView?.isHidden = false
+
+            hostingView.alphaValue = 0
+            barHostingView?.alphaValue = 1
+
+            // Instantly collapse height to avoid vertical bar drift,
+            // then animate only the width narrowing
+            let widthOnlyFrame = NSRect(
+                x: panel.frame.origin.x, y: notchInfo.barOriginY,
+                width: panel.frame.width, height: collapsedHeight
+            )
+            panel.setFrame(widthOnlyFrame, display: false)
+            hostingView.frame = NSRect(x: 0, y: 0, width: barWidth, height: collapsedHeight)
+            barHostingView?.frame = NSRect(x: 0, y: 0, width: Int(panel.frame.width), height: Int(collapsedHeight))
+
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.25
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                panel.animator().setFrame(targetFrame, display: true)
+            }, completionHandler: { [weak self] in
+                guard let self, self.isAnimatingCollapse else { return }
+                self.isAnimatingCollapse = false
+                self.barHostingView?.frame = NSRect(x: 0, y: 0, width: barWidth, height: collapsedHeight)
+                hostingView.frame = NSRect(x: 0, y: 0, width: barWidth, height: collapsedHeight)
+                hostingView.alphaValue = 1
+            })
         }
     }
 }

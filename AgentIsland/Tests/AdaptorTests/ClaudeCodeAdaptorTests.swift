@@ -455,6 +455,182 @@ struct ClaudeCodeAdaptorTests {
 
     // MARK: - Stale Session Tests
 
+    // MARK: - AskUserQuestion Tests
+
+    @Test("AskUserQuestion creates choice confirmation")
+    func askUserQuestionCreatesChoiceConfirmation() async throws {
+        let adaptor = try makeAdaptor()
+        await adaptor.updateSessions([
+            ClaudeSessionFile(
+                pid: 8001, sessionId: "sess-ask", cwd: "/tmp/ask",
+                startedAt: 1779212717359, version: "2.1.0",
+                kind: "interactive", entrypoint: "cli", status: nil, updatedAt: nil
+            )
+        ])
+
+        let questionsInput: [String: AnyCodable] = [
+            "questions": AnyCodable([
+                [
+                    "question": "Which approach do you prefer?",
+                    "header": "Approach",
+                    "options": [
+                        ["label": "Option A", "description": "Fast but risky"],
+                        ["label": "Option B", "description": "Safe but slow"],
+                    ],
+                    "multiSelect": false,
+                ] as [String: Any]
+            ])
+        ]
+
+        await adaptor.handlePermissionRequest(
+            HookMessage(
+                type: "PermissionRequest", sessionId: "sess-ask",
+                toolName: "AskUserQuestion", toolInput: questionsInput,
+                permissionLevel: nil
+            )
+        ) { _ in }
+
+        let session = AgentSession(
+            id: "sess-ask", agentType: .claudeCode, title: "ask",
+            status: .waitingConfirmation, startTime: Date(), lastUpdate: Date()
+        )
+        let confs = try await adaptor.getPendingConfirmations(session: session)
+        #expect(confs.count == 1)
+        #expect(confs.first?.type == .choice)
+        #expect(confs.first?.title == "Which approach do you prefer?")
+
+        if case .choice(let details) = confs.first?.details {
+            #expect(details.options.count == 2)
+            #expect(details.options[0].label == "Option A")
+            #expect(details.options[1].label == "Option B")
+            #expect(details.options[0].description == "Fast but risky")
+        } else {
+            Issue.record("Expected .choice details")
+        }
+    }
+
+    @Test("respond select sends updatedInput with answers")
+    func respondSelectSendsUpdatedInput() async throws {
+        let adaptor = try makeAdaptor()
+        await adaptor.updateSessions([
+            ClaudeSessionFile(
+                pid: 8002, sessionId: "sess-select", cwd: "/tmp/sel",
+                startedAt: 1779212717359, version: "2.1.0",
+                kind: "interactive", entrypoint: "cli", status: nil, updatedAt: nil
+            )
+        ])
+
+        let questionsInput: [String: AnyCodable] = [
+            "questions": AnyCodable([
+                [
+                    "question": "Pick a color",
+                    "options": [
+                        ["label": "Red", "description": "Warm"],
+                        ["label": "Blue", "description": "Cool"],
+                    ],
+                ] as [String: Any]
+            ])
+        ]
+
+        var receivedResponse: HookResponse?
+        await adaptor.handlePermissionRequest(
+            HookMessage(
+                type: "PermissionRequest", sessionId: "sess-select",
+                toolName: "AskUserQuestion", toolInput: questionsInput,
+                permissionLevel: nil
+            )
+        ) { response in receivedResponse = response }
+
+        let session = AgentSession(
+            id: "sess-select", agentType: .claudeCode, title: "sel",
+            status: .waitingConfirmation, startTime: Date(), lastUpdate: Date()
+        )
+        let conf = try #require(try await adaptor.getPendingConfirmations(session: session).first)
+
+        try await adaptor.respond(session: session, confirmation: conf, response: .select(optionId: "Blue"))
+
+        #expect(receivedResponse?.decision == "allow")
+        #expect(receivedResponse?.updatedInput != nil)
+        let answers = receivedResponse?.updatedInput?["answers"]?.value as? [String: Any]
+        #expect(answers?["Pick a color"] as? String == "Blue")
+    }
+
+    @Test("AskUserQuestion with malformed input falls through to permission")
+    func askUserQuestionMalformedInput() async throws {
+        let adaptor = try makeAdaptor()
+        await adaptor.updateSessions([
+            ClaudeSessionFile(
+                pid: 8003, sessionId: "sess-malformed", cwd: "/tmp/bad",
+                startedAt: 1779212717359, version: "2.1.0",
+                kind: "interactive", entrypoint: "cli", status: nil, updatedAt: nil
+            )
+        ])
+
+        let badInput: [String: AnyCodable] = ["notQuestions": AnyCodable("garbage")]
+
+        await adaptor.handlePermissionRequest(
+            HookMessage(
+                type: "PermissionRequest", sessionId: "sess-malformed",
+                toolName: "AskUserQuestion", toolInput: badInput,
+                permissionLevel: nil
+            )
+        ) { _ in }
+
+        let session = AgentSession(
+            id: "sess-malformed", agentType: .claudeCode, title: "bad",
+            status: .waitingConfirmation, startTime: Date(), lastUpdate: Date()
+        )
+        let confs = try await adaptor.getPendingConfirmations(session: session)
+        #expect(confs.count == 1)
+        #expect(confs.first?.type == .permission)
+    }
+
+    @Test("activity event clears pending confirmations and invokes callback")
+    func activityEventClearsPendingConfirmations() async throws {
+        let adaptor = try makeAdaptor()
+        await adaptor.updateSessions([
+            ClaudeSessionFile(
+                pid: 8004, sessionId: "sess-activity", cwd: "/tmp/act",
+                startedAt: 1779212717359, version: "2.1.0",
+                kind: "interactive", entrypoint: "cli", status: nil, updatedAt: nil
+            )
+        ])
+
+        var callbackInvoked = false
+        var callbackResponse: HookResponse?
+        await adaptor.handlePermissionRequest(
+            HookMessage(
+                type: "PermissionRequest", sessionId: "sess-activity",
+                toolName: "Bash", toolInput: ["command": AnyCodable("echo hello")],
+                permissionLevel: nil
+            )
+        ) { response in
+            callbackInvoked = true
+            callbackResponse = response
+        }
+
+        let session = AgentSession(
+            id: "sess-activity", agentType: .claudeCode, title: "act",
+            status: .waitingConfirmation, startTime: Date(), lastUpdate: Date()
+        )
+        let confsBefore = try await adaptor.getPendingConfirmations(session: session)
+        #expect(confsBefore.count == 1)
+
+        await adaptor.handleStatusHook(
+            HookMessage(
+                type: "PreToolUse", sessionId: "sess-activity",
+                toolName: "Bash", toolInput: nil, permissionLevel: nil
+            )
+        ) { _ in }
+
+        let confsAfter = try await adaptor.getPendingConfirmations(session: session)
+        #expect(confsAfter.isEmpty)
+        #expect(callbackInvoked == true)
+        #expect(callbackResponse == .empty)
+    }
+
+    // MARK: - Stale Session Tests
+
     @Test("updateSessions removes stale sessions and clears their pending requests")
     func updateSessionsRemovesStale() async throws {
         let adaptor = try makeAdaptor()

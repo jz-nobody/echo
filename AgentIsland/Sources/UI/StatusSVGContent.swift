@@ -21,7 +21,7 @@ enum StatusSVGContent {
         }
       </style>
       <g class="cursor">
-        <rect x="6.5" y="3" width="2.5" height="10" rx="0.8" fill="#4caf50"/>
+        <rect x="6" y="3" width="4" height="10" rx="1" fill="#4caf50"/>
       </g>
     </svg>
     """

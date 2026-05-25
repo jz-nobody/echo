@@ -103,18 +103,24 @@ struct NotchRootView: View {
             if !confirmationQueue.isEmpty {
                 if panelState.isExpanded {
                     panelState.cancelAutoCollapse()
-                } else if !shouldSuppressAutoExpand() {
-                    panelState.autoExpand()
+                } else {
+                    panelState.expandForConfirmation()
                 }
+            } else if panelState.wasAutoExpandedForConfirmation {
+                panelState.delayedCollapse()
+            }
+        }
+        .onChange(of: panelState.isExpanded) {
+            if panelState.isExpanded {
+                confirmationQueue.update(
+                    from: sessionManager.pendingConfirmations,
+                    sessions: sessionManager.sessions
+                )
             }
         }
         .onChange(of: frontmostAppMonitor.frontmostAppPID) {
-            if !confirmationQueue.isEmpty {
-                if panelState.isExpanded {
-                    panelState.cancelAutoCollapse()
-                } else if !shouldSuppressAutoExpand() {
-                    panelState.autoExpand()
-                }
+            if !confirmationQueue.isEmpty && !panelState.isExpanded {
+                panelState.expandForConfirmation()
             }
         }
         .onChange(of: sessionManager.sessions) {

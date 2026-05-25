@@ -30,7 +30,7 @@ struct SessionRowView: View {
         .padding(.vertical, 8)
         .padding(.leading, 0)
         .padding(.trailing, 6)
-        .background(isHovered ? DesignTokens.cardHover : DesignTokens.cardBackground)
+        .background(isHovered ? DesignTokens.cardHover : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .contentShape(Rectangle())
         .onHover { hovering in

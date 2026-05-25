@@ -4,6 +4,7 @@ import Foundation
 @Observable
 final class PanelState {
     private(set) var isExpanded = false
+    private(set) var wasAutoExpandedForConfirmation = false
     var showQuitConfirmation = false
     private var expandTimer: Timer?
     private var collapseTimer: Timer?
@@ -47,6 +48,7 @@ final class PanelState {
         expandTimer?.invalidate()
         expandTimer = nil
         guard settingsStore.autoCollapseOnMouseExit else { return }
+        guard !wasAutoExpandedForConfirmation else { return }
         collapseTimer?.invalidate()
         collapseTimer = nil
         collapse()
@@ -62,6 +64,7 @@ final class PanelState {
         collapseTimer = nil
         autoCollapseTimer?.invalidate()
         autoCollapseTimer = nil
+        wasAutoExpandedForConfirmation = false
         isExpanded = true
         onExpandChange?()
     }
@@ -74,6 +77,7 @@ final class PanelState {
         expandTimer?.invalidate()
         expandTimer = nil
         showQuitConfirmation = false
+        wasAutoExpandedForConfirmation = false
         isExpanded = false
         onExpandChange?()
     }
@@ -86,6 +90,26 @@ final class PanelState {
         isExpanded = true
         onExpandChange?()
         autoCollapseTimer = Timer.scheduledTimer(withTimeInterval: autoCollapseDelay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.collapse()
+            }
+        }
+    }
+
+    func expandForConfirmation() {
+        expandTimer?.invalidate()
+        collapseTimer?.invalidate()
+        collapseTimer = nil
+        autoCollapseTimer?.invalidate()
+        autoCollapseTimer = nil
+        wasAutoExpandedForConfirmation = true
+        isExpanded = true
+        onExpandChange?()
+    }
+
+    func delayedCollapse() {
+        autoCollapseTimer?.invalidate()
+        autoCollapseTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.collapse()
             }

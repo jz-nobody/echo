@@ -12,7 +12,7 @@ struct CompactBarView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            HStack(spacing: -8) {
+            HStack(spacing: 2) {
                 PetAnimationView(status: status, size: DesignTokens.petSizeCompact)
                     .frame(width: DesignTokens.petSizeCompact, height: DesignTokens.petSizeCompact)
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
@@ -20,9 +20,7 @@ struct CompactBarView: View {
                 StatusAnimationView(status: status, size: DesignTokens.statusIndicatorSize)
                     .frame(width: DesignTokens.statusIndicatorSize, height: DesignTokens.statusIndicatorSize)
             }
-            .offset(x: -8)
-
-            Spacer(minLength: 4)
+            .offset(x: -10)
 
             if confirmationCount > 0 {
                 HStack(spacing: 3) {
@@ -38,34 +36,33 @@ struct CompactBarView: View {
                 .clipShape(Capsule())
             }
 
-            if sessionCount > 0 {
-                Text("×\(sessionCount)")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(DesignTokens.textPrimary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(DesignTokens.cardHover)
-                    .clipShape(Capsule())
-            }
-
             if let time = elapsedTime {
                 Text(time)
                     .font(.system(size: 11, weight: .regular))
                     .foregroundStyle(DesignTokens.textSecondary)
             }
 
-            if let onClose {
-                Button(action: onClose) {
-                    Image(systemName: "power")
-                        .font(.system(size: 11, weight: .semibold))
+            Spacer(minLength: 4)
+
+            HStack(spacing: 2) {
+                if sessionCount > 0 {
+                    Text("×\(sessionCount)")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(DesignTokens.textPrimary)
-                        .frame(width: 22, height: 22)
-                        .background(DesignTokens.cardHover)
-                        .clipShape(Circle())
                 }
-                .buttonStyle(.plain)
-                .onHover { hovering in onCloseHover?(hovering) }
+
+                if let onClose {
+                    Button(action: onClose) {
+                        Image(systemName: "power")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(DesignTokens.textPrimary)
+                            .frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in onCloseHover?(hovering) }
+                }
             }
+            .offset(x: 6)
         }
         .padding(.horizontal, DesignTokens.compactBarPaddingH)
         .frame(height: DesignTokens.compactBarHeight)
