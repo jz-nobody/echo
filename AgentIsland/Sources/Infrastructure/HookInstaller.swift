@@ -1,16 +1,30 @@
 import Foundation
 
 enum HookInstaller {
-    static let bridgeInstallPath = NSHomeDirectory() + "/.agent-island/bin/agent-island-bridge"
-    private static let claudeSettingsPath = NSHomeDirectory() + "/.claude/settings.json"
-    private static let hookIdentifier = "agent-island"
 
-    static func ensureHooksInstalled() throws {
-        try installBridgeScript()
-        try registerHook()
+    struct AgentHookConfig: Sendable {
+        let source: String
+        let settingsPath: String
+        let hookTypes: [(type: String, timeout: Int)]
+        let requiresExistingDir: Bool
     }
 
-    static func installBridgeScript() throws {
+    static let bridgeInstallPath = NSHomeDirectory() + "/.agent-island/bin/agent-island-bridge"
+    private static let hookIdentifier = "agent-island"
+
+    static var agentConfigs: [AgentHookConfig] {
+        AgentConfig.allDefaults.map(\.hookConfig)
+    }
+
+    static func ensureHooksInstalled() throws {
+        try installBridge()
+        for config in agentConfigs {
+            try registerHooks(config: config)
+        }
+        cleanupOrphanedBridges()
+    }
+
+    static func installBridge() throws {
         let binDir = (bridgeInstallPath as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(atPath: binDir, withIntermediateDirectories: true)
 
@@ -31,33 +45,22 @@ enum HookInstaller {
             return
         }
 
-        let script = Self.fallbackBridgeScript
-        try script.write(toFile: bridgeInstallPath, atomically: true, encoding: .utf8)
+        try fallbackBridgeScript.write(toFile: bridgeInstallPath, atomically: true, encoding: .utf8)
         try setExecutable(bridgeInstallPath)
     }
 
-    static func registerHook() throws {
-        try registerHook(settingsPath: claudeSettingsPath)
-    }
-
-    static let requiredHookTypes: [(type: String, timeout: Int)] = [
-        ("PermissionRequest", 86400),
-        ("PreToolUse", 5),
-        ("PostToolUse", 5),
-        ("UserPromptSubmit", 5),
-        ("PreCompact", 5),
-        ("Stop", 5),
-        ("SessionStart", 5),
-        ("StopFailure", 5),
-        ("SubagentStart", 5),
-        ("SubagentStop", 5),
-    ]
-
-    static func registerHook(settingsPath: String) throws {
+    static func registerHooks(config: AgentHookConfig, settingsPath: String? = nil) throws {
+        let path = settingsPath ?? config.settingsPath
         let fm = FileManager.default
+
+        if config.requiresExistingDir {
+            let dir = (path as NSString).deletingLastPathComponent
+            guard fm.fileExists(atPath: dir) else { return }
+        }
+
         var settings: [String: Any]
-        if fm.fileExists(atPath: settingsPath),
-           let data = fm.contents(atPath: settingsPath),
+        if fm.fileExists(atPath: path),
+           let data = fm.contents(atPath: path),
            let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             settings = parsed
         } else {
@@ -65,17 +68,23 @@ enum HookInstaller {
         }
 
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
+        let command = "\(bridgeInstallPath) --source \(config.source)"
 
-        let allInstalled = requiredHookTypes.allSatisfy { hookType, _ in
+        let allInstalled = config.hookTypes.allSatisfy { hookType, _ in
             guard let entries = hooks[hookType] as? [[String: Any]] else { return false }
             return entries.contains { entry in
                 guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
-                return entryHooks.contains { ($0["command"] as? String)?.contains(hookIdentifier) == true }
+                let hasCommand = entryHooks.contains { hook in
+                    guard let cmd = hook["command"] as? String else { return false }
+                    return cmd.contains(hookIdentifier) && cmd.contains("--source")
+                }
+                let hasMatcher = entry["matcher"] != nil
+                return hasCommand && hasMatcher
             }
         }
         guard !allInstalled else { return }
 
-        for (hookType, timeout) in requiredHookTypes {
+        for (hookType, timeout) in config.hookTypes {
             var entries = hooks[hookType] as? [[String: Any]] ?? []
 
             entries.removeAll { entry in
@@ -87,7 +96,7 @@ enum HookInstaller {
                 "matcher": "*",
                 "hooks": [[
                     "type": "command",
-                    "command": bridgeInstallPath,
+                    "command": command,
                     "timeout": timeout,
                 ] as [String: Any]],
             ]
@@ -97,22 +106,35 @@ enum HookInstaller {
 
         settings["hooks"] = hooks
         let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .sortedKeys])
-        try data.write(to: URL(fileURLWithPath: settingsPath))
+        try data.write(to: URL(fileURLWithPath: path))
     }
 
-    static func isHookInstalled(settingsPath: String? = nil) -> Bool {
-        let path = settingsPath ?? claudeSettingsPath
+    static func isHookInstalled(config: AgentHookConfig, settingsPath: String? = nil) -> Bool {
+        let path = settingsPath ?? config.settingsPath
         guard let data = FileManager.default.contents(atPath: path),
               let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let hooks = settings["hooks"] as? [String: Any] else {
             return false
         }
-        return requiredHookTypes.allSatisfy { hookType, _ in
+        return config.hookTypes.allSatisfy { hookType, _ in
             guard let entries = hooks[hookType] as? [[String: Any]] else { return false }
             return entries.contains { entry in
                 guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
-                return entryHooks.contains { ($0["command"] as? String)?.contains(hookIdentifier) == true }
+                let hasCommand = entryHooks.contains { hook in
+                    guard let cmd = hook["command"] as? String else { return false }
+                    return cmd.contains(hookIdentifier) && cmd.contains("--source")
+                }
+                let hasMatcher = entry["matcher"] != nil
+                return hasCommand && hasMatcher
             }
+        }
+    }
+
+    private static func cleanupOrphanedBridges() {
+        let binDir = (bridgeInstallPath as NSString).deletingLastPathComponent
+        let orphans = ["agent-island-bridge-codex", "agent-island-bridge-qoderwork"]
+        for name in orphans {
+            try? FileManager.default.removeItem(atPath: binDir + "/" + name)
         }
     }
 
@@ -125,9 +147,21 @@ enum HookInstaller {
 
     private static let fallbackBridgeScript = """
     #!/bin/zsh
-    SOCK="/tmp/agent-island.sock"
+    SOURCE="claude"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --source) SOURCE="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    case "$SOURCE" in
+        claude)     SOCK="/tmp/agent-island.sock" ;;
+        codex)      SOCK="/tmp/agent-island-codex.sock" ;;
+        qoderwork)  SOCK="/tmp/agent-island-qoderwork.sock" ;;
+        *)          printf '%s\\n' '{"decision":"ask"}'; exit 0 ;;
+    esac
     FALLBACK='{"decision":"ask"}'
-    [ ! -S "$SOCK" ] && { echo "$FALLBACK"; exit 0; }
+    [ ! -S "$SOCK" ] && { printf '%s\\n' "$FALLBACK"; exit 0; }
     INPUT=$(cat)
     RESPONSE=$(printf '%s' "$INPUT" | python3 -c '
     import socket, sys, json
@@ -137,7 +171,7 @@ enum HookInstaller {
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.settimeout(timeout)
     try:
-        sock.connect("/tmp/agent-island.sock")
+        sock.connect(sys.argv[1])
         sock.sendall(data)
         sock.shutdown(socket.SHUT_WR)
         resp = b""
@@ -151,7 +185,7 @@ enum HookInstaller {
         pass
     finally:
         sock.close()
-    ' 2>/dev/null) || RESPONSE=""
-    [ -n "$RESPONSE" ] && echo "$RESPONSE" || echo "$FALLBACK"
+    ' "$SOCK" 2>/dev/null) || RESPONSE=""
+    [ -n "$RESPONSE" ] && printf '%s\\n' "$RESPONSE" || printf '%s\\n' "$FALLBACK"
     """
 }

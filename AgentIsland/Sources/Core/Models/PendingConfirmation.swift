@@ -39,7 +39,9 @@ enum DiffLineType: Sendable, Equatable {
 
 struct ChoiceDetails: Sendable, Equatable {
     let question: String
+    let header: String?
     let options: [ChoiceOption]
+    let multiSelect: Bool
 }
 
 struct ChoiceOption: Identifiable, Sendable, Equatable {

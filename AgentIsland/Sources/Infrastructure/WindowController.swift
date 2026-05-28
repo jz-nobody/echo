@@ -147,7 +147,7 @@ final class WindowController: NSObject {
                     }
                 default:
                     if let digit = Int(chars), digit >= 1, digit <= 9 {
-                        if case .choice(let details) = current.confirmation.details {
+                        if case .choice(let details) = current.confirmation.details, !details.multiSelect {
                             let index = digit - 1
                             if index < details.options.count {
                                 self.handleConfirmationResponse(current, .select(optionId: details.options[index].id))
@@ -262,9 +262,12 @@ final class WindowController: NSObject {
         let barWidth = notchInfo.barWidth
 
         if isExpanded {
+            panel.makeKey()
             isAnimatingCollapse = false
             hostingView.alphaValue = 1
+            hostingView.isHidden = false
             barHostingView?.alphaValue = 0
+            barHostingView?.isHidden = true
             let targetWidth = max(barWidth, settingsStore.maxPanelWidth)
             let contentH = panelState.expandedContentHeight
             let targetHeight = contentH > 0
@@ -313,7 +316,9 @@ final class WindowController: NSObject {
             )
 
             hostingView.alphaValue = 0
+            hostingView.isHidden = true
             barHostingView?.alphaValue = 1
+            barHostingView?.isHidden = false
 
             // Instantly collapse height to avoid vertical bar drift,
             // then animate only the width narrowing
@@ -335,6 +340,7 @@ final class WindowController: NSObject {
                 self.barHostingView?.frame = NSRect(x: 0, y: 0, width: barWidth, height: collapsedHeight)
                 hostingView.frame = NSRect(x: 0, y: 0, width: barWidth, height: collapsedHeight)
                 hostingView.alphaValue = 1
+                hostingView.isHidden = false
             })
         }
     }
@@ -395,5 +401,12 @@ private final class NotchPanel: NSPanel {
 
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
         frameRect
+    }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown && !isKeyWindow {
+            makeKey()
+        }
+        super.sendEvent(event)
     }
 }

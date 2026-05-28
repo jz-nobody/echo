@@ -32,8 +32,13 @@ enum SessionFileParser {
         return deduplicateByParent(allSessions)
     }
 
+    private struct DeduplicationKey: Hashable {
+        let parentPID: Int32
+        let cwd: String
+    }
+
     private static func deduplicateByParent(_ sessions: [ClaudeSessionFile]) -> [ClaudeSessionFile] {
-        var vscodeByParent: [Int32: [ClaudeSessionFile]] = [:]
+        var vscodeByKey: [DeduplicationKey: [ClaudeSessionFile]] = [:]
         var others: [ClaudeSessionFile] = []
 
         for session in sessions {
@@ -42,10 +47,11 @@ enum SessionFileParser {
                 continue
             }
             let ppid = parentPID(of: Int32(session.pid)) ?? -1
-            vscodeByParent[ppid, default: []].append(session)
+            let key = DeduplicationKey(parentPID: ppid, cwd: session.cwd)
+            vscodeByKey[key, default: []].append(session)
         }
 
-        for (_, group) in vscodeByParent {
+        for (_, group) in vscodeByKey {
             if let best = group.max(by: { jsonlModTime($0) < jsonlModTime($1) }) {
                 others.append(best)
             }

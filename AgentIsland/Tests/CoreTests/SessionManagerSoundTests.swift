@@ -41,18 +41,15 @@ struct SessionManagerSoundTests {
 
     @Test("pollOnce triggers sessionStart sound for new session")
     @MainActor
-    func pollOnceTriggersSessionStart() async {
-        let mock = MockAgentAdaptor()
+    func pollOnceTriggersSessionStart() async throws {
+        let server = try makeMockBridgeServer()
         let soundPlayer = MockSoundPlayer()
-        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings(), soundPlayer: soundPlayer)
+        let manager = SessionManager(bridgeServer: server, settingsStore: makeSettings(), soundPlayer: soundPlayer)
 
-        await mock.setAvailable(true)
-        await mock.setSessions([])
-        await mock.setUseSessionOwnStatus(true)
         await manager.pollOnce()
         #expect(soundPlayer.playedEvents.isEmpty)
 
-        await mock.setSessions([makeSession(id: "s1", status: .executing)])
+        await server.injectSession(makeSession(id: "s1", status: .executing))
         await manager.pollOnce()
 
         #expect(soundPlayer.playedEvents.contains(.sessionStart))
@@ -61,17 +58,16 @@ struct SessionManagerSoundTests {
     @Test("respond allow triggers confirmationApproved")
     @MainActor
     func respondAllowTriggersApproved() async throws {
-        let mock = MockAgentAdaptor()
+        let server = try makeMockBridgeServer()
         let soundPlayer = MockSoundPlayer()
-        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings(), soundPlayer: soundPlayer)
-        await mock.setAvailable(true)
-        await mock.setSessions([])
-        await mock.setUseSessionOwnStatus(true)
+        let manager = SessionManager(bridgeServer: server, settingsStore: makeSettings(), soundPlayer: soundPlayer)
 
         let session = makeSession()
-        let confirmation = makeConfirmation()
+        let conf = makeConfirmation()
+        await server.injectSession(session)
+        await server.injectConfirmation(conf, sessionId: session.id)
 
-        try await manager.respond(session: session, confirmation: confirmation, response: .allow)
+        try await manager.respond(session: session, confirmation: conf, response: .allow)
 
         #expect(soundPlayer.playedEvents.contains(.confirmationApproved))
     }
@@ -79,17 +75,16 @@ struct SessionManagerSoundTests {
     @Test("respond deny triggers confirmationDenied")
     @MainActor
     func respondDenyTriggersDenied() async throws {
-        let mock = MockAgentAdaptor()
+        let server = try makeMockBridgeServer()
         let soundPlayer = MockSoundPlayer()
-        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings(), soundPlayer: soundPlayer)
-        await mock.setAvailable(true)
-        await mock.setSessions([])
-        await mock.setUseSessionOwnStatus(true)
+        let manager = SessionManager(bridgeServer: server, settingsStore: makeSettings(), soundPlayer: soundPlayer)
 
         let session = makeSession()
-        let confirmation = makeConfirmation()
+        let conf = makeConfirmation()
+        await server.injectSession(session)
+        await server.injectConfirmation(conf, sessionId: session.id)
 
-        try await manager.respond(session: session, confirmation: confirmation, response: .deny)
+        try await manager.respond(session: session, confirmation: conf, response: .deny)
 
         #expect(soundPlayer.playedEvents.contains(.confirmationDenied))
     }
@@ -97,19 +92,17 @@ struct SessionManagerSoundTests {
     @Test("respond select triggers confirmationApproved")
     @MainActor
     func respondSelectTriggersApproved() async throws {
-        let mock = MockAgentAdaptor()
+        let server = try makeMockBridgeServer()
         let soundPlayer = MockSoundPlayer()
-        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings(), soundPlayer: soundPlayer)
-        await mock.setAvailable(true)
-        await mock.setSessions([])
-        await mock.setUseSessionOwnStatus(true)
+        let manager = SessionManager(bridgeServer: server, settingsStore: makeSettings(), soundPlayer: soundPlayer)
 
         let session = makeSession()
-        let confirmation = makeConfirmation()
+        let conf = makeConfirmation()
+        await server.injectSession(session)
+        await server.injectConfirmation(conf, sessionId: session.id)
 
         try await manager.respond(
-            session: session,
-            confirmation: confirmation,
+            session: session, confirmation: conf,
             response: .select(optionId: "opt1")
         )
 
@@ -118,16 +111,54 @@ struct SessionManagerSoundTests {
 
     @Test("pollOnce works without sound player")
     @MainActor
-    func pollOnceWithoutSoundPlayer() async {
-        let mock = MockAgentAdaptor()
-        let manager = SessionManager(adaptors: [mock], settingsStore: makeSettings())
-        await mock.setAvailable(true)
-        await mock.setSessions([makeSession()])
-        await mock.setUseSessionOwnStatus(true)
+    func pollOnceWithoutSoundPlayer() async throws {
+        let server = try makeMockBridgeServer()
+        let manager = SessionManager(bridgeServer: server, settingsStore: makeSettings())
+        await server.injectSession(makeSession())
 
         await manager.pollOnce()
         await manager.pollOnce()
 
         #expect(manager.sessions.count == 1)
+    }
+
+    @Test("respond multiSelect triggers confirmationApproved")
+    @MainActor
+    func respondMultiSelectTriggersApproved() async throws {
+        let server = try makeMockBridgeServer()
+        let soundPlayer = MockSoundPlayer()
+        let manager = SessionManager(bridgeServer: server, settingsStore: makeSettings(), soundPlayer: soundPlayer)
+
+        let session = makeSession()
+        let conf = makeConfirmation()
+        await server.injectSession(session)
+        await server.injectConfirmation(conf, sessionId: session.id)
+
+        try await manager.respond(
+            session: session, confirmation: conf,
+            response: .multiSelect(optionIds: ["opt1", "opt2"])
+        )
+
+        #expect(soundPlayer.playedEvents.contains(.confirmationApproved))
+    }
+
+    @Test("respond freeText triggers confirmationApproved")
+    @MainActor
+    func respondFreeTextTriggersApproved() async throws {
+        let server = try makeMockBridgeServer()
+        let soundPlayer = MockSoundPlayer()
+        let manager = SessionManager(bridgeServer: server, settingsStore: makeSettings(), soundPlayer: soundPlayer)
+
+        let session = makeSession()
+        let conf = makeConfirmation()
+        await server.injectSession(session)
+        await server.injectConfirmation(conf, sessionId: session.id)
+
+        try await manager.respond(
+            session: session, confirmation: conf,
+            response: .freeText("Custom answer")
+        )
+
+        #expect(soundPlayer.playedEvents.contains(.confirmationApproved))
     }
 }

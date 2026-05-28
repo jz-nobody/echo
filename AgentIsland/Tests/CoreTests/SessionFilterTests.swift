@@ -113,4 +113,50 @@ struct SessionFilterTests {
         #expect(result.count == 1)
         #expect(result[0].id == "s2")
     }
+
+    // MARK: - Codex Background Session Filters
+
+    @Test("built-in filter hides Memory Writer sessions")
+    @MainActor
+    func filtersMemoryWriter() {
+        let store = makeStore()
+        let sessions = [makeSession(title: "Memory Writer consolidating")]
+        let result = SessionFilter.apply(to: sessions, settings: store)
+        #expect(result.isEmpty)
+    }
+
+    @Test("built-in filter hides Guardian-AutoReview sessions")
+    @MainActor
+    func filtersGuardianAutoReview() {
+        let store = makeStore()
+        let sessions = [makeSession(title: "Guardian-AutoReview scanning")]
+        let result = SessionFilter.apply(to: sessions, settings: store)
+        #expect(result.isEmpty)
+    }
+
+    @Test("built-in filter hides Chronicle Summary sessions")
+    @MainActor
+    func filtersChronicleSummary() {
+        let store = makeStore()
+        let sessions = [makeSession(title: "Chronicle Summary generating")]
+        let result = SessionFilter.apply(to: sessions, settings: store)
+        #expect(result.isEmpty)
+    }
+
+    @Test("Codex background patterns mixed with normal sessions")
+    @MainActor
+    func codexBackgroundPatternsMixed() {
+        let store = makeStore()
+        let sessions = [
+            makeSession(id: "s1", title: "Memory Writer task"),
+            makeSession(id: "s2", title: "Fix login bug"),
+            makeSession(id: "s3", title: "Guardian-AutoReview check"),
+            makeSession(id: "s4", title: "Chronicle Summary update"),
+            makeSession(id: "s5", title: "Implement auth feature"),
+        ]
+        let result = SessionFilter.apply(to: sessions, settings: store)
+        #expect(result.count == 2)
+        #expect(result.map(\.id).contains("s2"))
+        #expect(result.map(\.id).contains("s5"))
+    }
 }

@@ -28,16 +28,13 @@ struct SessionManagerFilterTests {
 
     @Test("pollOnce filters matching sessions")
     @MainActor
-    func pollOnceFiltersMatching() async {
-        let mock = MockAgentAdaptor()
-        await mock.setSessions([
-            makeSession(id: "s1", title: "Memory Consolidation task"),
-            makeSession(id: "s2", title: "Build feature"),
-        ])
-        await mock.setUseSessionOwnStatus(true)
+    func pollOnceFiltersMatching() async throws {
+        let server = try makeMockBridgeServer()
+        await server.injectSession(makeSession(id: "s1", title: "Memory Consolidation task"))
+        await server.injectSession(makeSession(id: "s2", title: "Build feature"))
 
         let settings = makeSettings()
-        let manager = SessionManager(adaptors: [mock], settingsStore: settings)
+        let manager = SessionManager(bridgeServer: server, settingsStore: settings)
         await manager.pollOnce()
 
         #expect(manager.sessions.count == 1)
@@ -46,16 +43,13 @@ struct SessionManagerFilterTests {
 
     @Test("pollOnce preserves non-matching sessions")
     @MainActor
-    func pollOncePreservesNonMatching() async {
-        let mock = MockAgentAdaptor()
-        await mock.setSessions([
-            makeSession(id: "s1", title: "Fix auth bug"),
-            makeSession(id: "s2", title: "Write tests"),
-        ])
-        await mock.setUseSessionOwnStatus(true)
+    func pollOncePreservesNonMatching() async throws {
+        let server = try makeMockBridgeServer()
+        await server.injectSession(makeSession(id: "s1", title: "Fix auth bug"))
+        await server.injectSession(makeSession(id: "s2", title: "Write tests"))
 
         let settings = makeSettings()
-        let manager = SessionManager(adaptors: [mock], settingsStore: settings)
+        let manager = SessionManager(bridgeServer: server, settingsStore: settings)
         await manager.pollOnce()
 
         #expect(manager.sessions.count == 2)
@@ -63,17 +57,14 @@ struct SessionManagerFilterTests {
 
     @Test("custom keyword filter applied during pollOnce")
     @MainActor
-    func customKeywordFilterApplied() async {
-        let mock = MockAgentAdaptor()
-        await mock.setSessions([
-            makeSession(id: "s1", title: "Deploy staging"),
-            makeSession(id: "s2", title: "Build feature"),
-        ])
-        await mock.setUseSessionOwnStatus(true)
+    func customKeywordFilterApplied() async throws {
+        let server = try makeMockBridgeServer()
+        await server.injectSession(makeSession(id: "s1", title: "Deploy staging"))
+        await server.injectSession(makeSession(id: "s2", title: "Build feature"))
 
         let settings = makeSettings()
         settings.filterKeywords = ["deploy"]
-        let manager = SessionManager(adaptors: [mock], settingsStore: settings)
+        let manager = SessionManager(bridgeServer: server, settingsStore: settings)
         await manager.pollOnce()
 
         #expect(manager.sessions.count == 1)
@@ -82,17 +73,14 @@ struct SessionManagerFilterTests {
 
     @Test("disabling built-in filters shows all sessions")
     @MainActor
-    func disabledBuiltInShowsAll() async {
-        let mock = MockAgentAdaptor()
-        await mock.setSessions([
-            makeSession(id: "s1", title: "Memory Consolidation task"),
-            makeSession(id: "s2", title: "Normal work"),
-        ])
-        await mock.setUseSessionOwnStatus(true)
+    func disabledBuiltInShowsAll() async throws {
+        let server = try makeMockBridgeServer()
+        await server.injectSession(makeSession(id: "s1", title: "Memory Consolidation task"))
+        await server.injectSession(makeSession(id: "s2", title: "Normal work"))
 
         let settings = makeSettings()
         settings.enableBuiltInFilters = false
-        let manager = SessionManager(adaptors: [mock], settingsStore: settings)
+        let manager = SessionManager(bridgeServer: server, settingsStore: settings)
         await manager.pollOnce()
 
         #expect(manager.sessions.count == 2)
@@ -100,15 +88,12 @@ struct SessionManagerFilterTests {
 
     @Test("filter changes take effect on next poll")
     @MainActor
-    func filterChangesEffectOnNextPoll() async {
-        let mock = MockAgentAdaptor()
-        await mock.setSessions([
-            makeSession(id: "s1", title: "Deploy staging"),
-        ])
-        await mock.setUseSessionOwnStatus(true)
+    func filterChangesEffectOnNextPoll() async throws {
+        let server = try makeMockBridgeServer()
+        await server.injectSession(makeSession(id: "s1", title: "Deploy staging"))
 
         let settings = makeSettings()
-        let manager = SessionManager(adaptors: [mock], settingsStore: settings)
+        let manager = SessionManager(bridgeServer: server, settingsStore: settings)
         await manager.pollOnce()
         #expect(manager.sessions.count == 1)
 

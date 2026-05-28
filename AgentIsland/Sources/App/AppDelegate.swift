@@ -5,24 +5,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: WindowController?
     private var sessionManager: SessionManager?
     private var settingsStore: SettingsStore?
-    private var claudeCodeAdaptor: ClaudeCodeAdaptor?
+    private var bridgeServer: BridgeServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        var adaptors: [any AgentAdaptor] = []
-
-        let mcpClient = MCPClient(baseURL: URL(string: "http://127.0.0.1:52345")!)
-        let qoderAdaptor = QoderWorkAdaptor(client: mcpClient)
-        adaptors.append(qoderAdaptor)
-
         do {
-            let claudeAdaptor = try ClaudeCodeAdaptor()
-            Task { await claudeAdaptor.startMonitoring() }
-            self.claudeCodeAdaptor = claudeAdaptor
-            adaptors.append(claudeAdaptor)
+            let server = try BridgeServer()
+            Task { await server.start() }
+            self.bridgeServer = server
         } catch {
-            NSLog("[AgentIsland] ClaudeCodeAdaptor init failed: \(error)")
+            NSLog("[AgentIsland] BridgeServer init failed: \(error)")
         }
 
         do {
@@ -36,7 +29,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.settingsStore = settings
 
         let soundPlayer = SoundPlayer(settings: settings)
-        let manager = SessionManager(adaptors: adaptors, settingsStore: settings, soundPlayer: soundPlayer)
+        let manager = SessionManager(
+            bridgeServer: bridgeServer!,
+            settingsStore: settings,
+            soundPlayer: soundPlayer
+        )
         manager.startPolling()
 
         self.sessionManager = manager
@@ -52,6 +49,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        Task { await claudeCodeAdaptor?.stopMonitoring() }
+        Task { await bridgeServer?.stop() }
     }
 }

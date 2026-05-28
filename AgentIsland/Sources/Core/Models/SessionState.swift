@@ -101,3 +101,29 @@ struct SessionState: Sendable, Equatable {
         return .executing
     }
 }
+
+extension SessionEvent {
+
+    var indicatesPostConfirmationProgress: Bool {
+        switch self {
+        case .userPromptSubmit, .preToolUse, .postToolUse, .stop, .stopFailure: true
+        default: false
+        }
+    }
+
+    static func from(hookType: String, toolName: String?) -> SessionEvent? {
+        switch hookType {
+        case "SessionStart": .sessionStart
+        case "UserPromptSubmit": .userPromptSubmit
+        case "PreToolUse": .preToolUse(toolName: toolName)
+        case "PostToolUse", "PostToolUseFailure": .postToolUse
+        case "PreCompact": .preCompact
+        case "Stop": .stop
+        case "StopFailure": .stopFailure
+        case "SubagentStart": .subagentStart
+        case "SubagentStop": .subagentStop
+        default: nil
+        }
+    }
+
+}

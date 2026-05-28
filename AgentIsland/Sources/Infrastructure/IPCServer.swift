@@ -4,26 +4,33 @@ import Darwin
 #endif
 
 protocol IPCServerDelegate: AnyObject, Sendable {
-    func ipcServer(_ server: IPCServer, didReceive message: HookMessage, respond: @escaping @Sendable (HookResponse) -> Void)
+    func ipcServer(_ server: IPCServer, didReceive message: HookMessage, clientPID: pid_t?, clientID: UUID, respond: @escaping @Sendable (HookResponse) -> Void)
+    func ipcServer(_ server: IPCServer, clientDidDisconnect clientID: UUID)
 }
 
 final class IPCServer: @unchecked Sendable {
+    let tag: String
     private let socketPath: String
     private let queue = DispatchQueue(label: "com.agentisland.ipc", qos: .userInitiated)
     private var serverFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
     private var clients: [UUID: ClientConnection] = [:]
+    private var disconnectTimer: DispatchSourceTimer?
     weak var delegate: IPCServerDelegate?
 
     private struct ClientConnection {
         let id: UUID
         let fileDescriptor: Int32
+        let peerPID: pid_t?
         var readSource: DispatchSourceRead?
         var buffer: Data
+        var messageDelivered: Bool = false
+        var responseCompleted: Bool = false
     }
 
-    init(socketPath: String = IPCProtocol.socketPath) throws {
+    init(socketPath: String = IPCProtocol.socketPath, tag: String = "") throws {
         self.socketPath = socketPath
+        self.tag = tag
     }
 
     func start() {
@@ -38,13 +45,14 @@ final class IPCServer: @unchecked Sendable {
 
     func stop() {
         queue.async { [self] in
+            disconnectTimer?.cancel()
+            disconnectTimer = nil
             acceptSource?.cancel()
             acceptSource = nil
-            for client in clients.values {
-                client.readSource?.cancel()
-                close(client.fileDescriptor)
+            let clientIDs = Array(clients.keys)
+            for id in clientIDs {
+                removeClient(id)
             }
-            clients.removeAll()
             if serverFD >= 0 {
                 close(serverFD)
                 serverFD = -1
@@ -102,6 +110,7 @@ final class IPCServer: @unchecked Sendable {
         acceptSource = source
 
         NSLog("[IPCServer] Listening on \(socketPath)")
+        startDisconnectTimer()
     }
 
     private func acceptClient() {
@@ -117,13 +126,18 @@ final class IPCServer: @unchecked Sendable {
         var noSigPipe: Int32 = 1
         setsockopt(clientFD, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
 
+        var peerPID: pid_t = 0
+        var pidLen = socklen_t(MemoryLayout<pid_t>.size)
+        let pidResult = getsockopt(clientFD, SOL_LOCAL, LOCAL_PEERPID, &peerPID, &pidLen)
+        let resolvedPID: pid_t? = (pidResult == 0 && peerPID > 0) ? peerPID : nil
+
         let flags = fcntl(clientFD, F_GETFL)
         _ = fcntl(clientFD, F_SETFL, flags | O_NONBLOCK)
 
         let clientID = UUID()
         let readSource = DispatchSource.makeReadSource(fileDescriptor: clientFD, queue: queue)
 
-        let client = ClientConnection(id: clientID, fileDescriptor: clientFD, readSource: readSource, buffer: Data())
+        let client = ClientConnection(id: clientID, fileDescriptor: clientFD, peerPID: resolvedPID, readSource: readSource, buffer: Data())
         clients[clientID] = client
 
         readSource.setEventHandler { [weak self] in
@@ -146,12 +160,14 @@ final class IPCServer: @unchecked Sendable {
 
             if let message = try? IPCProtocol.decodeHookMessage(from: client.buffer) {
                 NSLog("[IPCServer] Decoded \(message.type) from client \(clientID) fd=\(client.fileDescriptor)")
+                let pid = client.peerPID
                 client.readSource?.cancel()
                 client.readSource = nil
                 client.buffer = Data()
+                client.messageDelivered = true
                 clients[clientID] = client
 
-                delegate?.ipcServer(self, didReceive: message) { [weak self] response in
+                delegate?.ipcServer(self, didReceive: message, clientPID: pid, clientID: clientID) { [weak self] response in
                     NSLog("[IPCServer] Response callback invoked for client \(clientID)")
                     self?.sendResponse(response, toClient: clientID)
                 }
@@ -162,11 +178,13 @@ final class IPCServer: @unchecked Sendable {
         if bytesRead == 0 {
             if !client.buffer.isEmpty, let message = try? IPCProtocol.decodeHookMessage(from: client.buffer) {
                 NSLog("[IPCServer] Decoded \(message.type) from client \(clientID) on EOF fd=\(client.fileDescriptor)")
+                let pid = client.peerPID
                 client.readSource?.cancel()
                 client.readSource = nil
+                client.messageDelivered = true
                 clients[clientID] = client
 
-                delegate?.ipcServer(self, didReceive: message) { [weak self] response in
+                delegate?.ipcServer(self, didReceive: message, clientPID: pid, clientID: clientID) { [weak self] response in
                     NSLog("[IPCServer] Response callback invoked for client \(clientID)")
                     self?.sendResponse(response, toClient: clientID)
                 }
@@ -188,10 +206,17 @@ final class IPCServer: @unchecked Sendable {
                 return
             }
 
-            guard let data = try? IPCProtocol.encode(response) else {
-                NSLog("[IPCServer] Failed to encode response")
+            let data: Data
+            do {
+                data = try IPCProtocol.encode(response)
+            } catch {
+                NSLog("[IPCServer] Failed to encode response: \(error)")
                 self.removeClient(clientID)
                 return
+            }
+
+            if let json = String(data: data, encoding: .utf8) {
+                NSLog("[IPCServer] Response JSON: \(json.prefix(500))")
             }
 
             NSLog("[IPCServer] Writing \(data.count) bytes to client \(clientID) fd=\(client.fileDescriptor)")
@@ -218,9 +243,32 @@ final class IPCServer: @unchecked Sendable {
 
             if !writeError {
                 NSLog("[IPCServer] Response sent successfully to client \(clientID)")
+                self.clients[clientID]?.responseCompleted = true
             }
 
             self.removeClient(clientID)
+        }
+    }
+
+    private func startDisconnectTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 10, repeating: 10)
+        timer.setEventHandler { [weak self] in
+            self?.checkForDisconnectedClients()
+        }
+        timer.resume()
+        disconnectTimer = timer
+    }
+
+    private func checkForDisconnectedClients() {
+        for (clientID, client) in clients where client.messageDelivered && !client.responseCompleted {
+            var pfd = pollfd(fd: client.fileDescriptor, events: 0, revents: 0)
+            let result = poll(&pfd, 1, 0)
+            NSLog("[IPCServer] Poll client \(clientID) fd=\(client.fileDescriptor): result=\(result) revents=\(pfd.revents)")
+            if result > 0 && (pfd.revents & Int16(POLLHUP | POLLERR)) != 0 {
+                NSLog("[IPCServer] Peer disconnected for client \(clientID)")
+                removeClient(clientID)
+            }
         }
     }
 
@@ -228,6 +276,9 @@ final class IPCServer: @unchecked Sendable {
         guard let client = clients.removeValue(forKey: clientID) else { return }
         client.readSource?.cancel()
         close(client.fileDescriptor)
+        if client.messageDelivered && !client.responseCompleted {
+            delegate?.ipcServer(self, clientDidDisconnect: clientID)
+        }
     }
 
     enum IPCError: Error {

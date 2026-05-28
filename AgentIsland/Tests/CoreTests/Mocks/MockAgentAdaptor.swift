@@ -1,42 +1,51 @@
 import Foundation
 @testable import AgentIsland
 
-actor MockAgentAdaptor: AgentAdaptor {
-    nonisolated let agentType: AgentType = .qoderWork
-    var available = true
-    var sessionsToReturn: [AgentSession] = []
-    var statusToReturn: SessionStatus = .idle
-    var confirmationsToReturn: [PendingConfirmation] = []
-    var respondCalled = false
-    var lastRespondResponse: ConfirmationResponse?
+func makeMockBridgeServer() throws -> BridgeServer {
+    let tmpDir = NSTemporaryDirectory() + UUID().uuidString
+    try FileManager.default.createDirectory(atPath: tmpDir, withIntermediateDirectories: true)
+    let configs = [
+        AgentConfig(
+            agentType: .claudeCode, tag: "claude", displayName: "Claude Code",
+            socketPath: tmpDir + "/claude.sock",
+            hookSettingsPath: tmpDir + "/claude/settings.json",
+            hookTypes: AgentConfig.claude.hookTypes,
+            requiresExistingDir: false,
+            idleTimeout: nil
+        ),
+        AgentConfig(
+            agentType: .codex, tag: "codex", displayName: "Codex",
+            socketPath: tmpDir + "/codex.sock",
+            hookSettingsPath: tmpDir + "/nonexistent/hooks.json",
+            hookTypes: AgentConfig.codex.hookTypes,
+            requiresExistingDir: true,
+            idleTimeout: 7200
+        ),
+        AgentConfig(
+            agentType: .qoderWork, tag: "qoderwork", displayName: "QoderWork",
+            socketPath: tmpDir + "/qoderwork.sock",
+            hookSettingsPath: tmpDir + "/nonexistent/settings.json",
+            hookTypes: AgentConfig.qoderWork.hookTypes,
+            requiresExistingDir: true,
+            idleTimeout: nil
+        ),
+    ]
+    return try BridgeServer(configs: configs)
+}
 
-    var isAvailable: Bool { available }
-
-    func discoverSessions() async throws -> [AgentSession] { sessionsToReturn }
-
-    var useSessionOwnStatus = false
-
-    func getStatus(session: AgentSession) async throws -> SessionStatus {
-        useSessionOwnStatus ? session.status : statusToReturn
+extension BridgeServer {
+    func injectSession(_ session: AgentSession) {
+        sessions[session.id] = session
+        sessionStates[session.id] = SessionState(status: session.status)
     }
 
-    func getPendingConfirmations(session: AgentSession) async throws -> [PendingConfirmation] {
-        confirmationsToReturn
+    func injectConfirmation(
+        _ conf: PendingConfirmation,
+        sessionId: String,
+        respond: @escaping @Sendable (HookResponse) -> Void = { _ in }
+    ) {
+        pendingConfirmations[conf.id] = conf
+        confirmationToSession[conf.id] = sessionId
+        responseCallbacks[conf.id] = respond
     }
-
-    func respond(
-        session: AgentSession,
-        confirmation: PendingConfirmation,
-        response: ConfirmationResponse
-    ) async throws {
-        respondCalled = true
-        lastRespondResponse = response
-    }
-
-    func setSessions(_ sessions: [AgentSession]) { self.sessionsToReturn = sessions }
-    func setStatus(_ status: SessionStatus) { self.statusToReturn = status }
-    func setAvailable(_ value: Bool) { self.available = value }
-    func setConfirmations(_ confs: [PendingConfirmation]) { self.confirmationsToReturn = confs }
-    func setUseSessionOwnStatus(_ value: Bool) { self.useSessionOwnStatus = value }
-    func wasRespondCalled() -> Bool { respondCalled }
 }

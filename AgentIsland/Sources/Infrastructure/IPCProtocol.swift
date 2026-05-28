@@ -6,6 +6,9 @@ struct HookMessage: Codable, Sendable, Equatable {
     let toolName: String?
     let toolInput: [String: AnyCodable]?
     let permissionLevel: String?
+    let prompt: String?
+    let cwd: String?
+    let transcriptPath: String?
 
     enum CodingKeys: String, CodingKey {
         case type = "hook_event_name"
@@ -13,6 +16,29 @@ struct HookMessage: Codable, Sendable, Equatable {
         case toolName = "tool_name"
         case toolInput = "tool_input"
         case permissionLevel = "permission_level"
+        case prompt
+        case cwd
+        case transcriptPath = "transcript_path"
+    }
+
+    init(
+        type: String,
+        sessionId: String,
+        toolName: String?,
+        toolInput: [String: AnyCodable]?,
+        permissionLevel: String?,
+        prompt: String? = nil,
+        cwd: String? = nil,
+        transcriptPath: String? = nil
+    ) {
+        self.type = type
+        self.sessionId = sessionId
+        self.toolName = toolName
+        self.toolInput = toolInput
+        self.permissionLevel = permissionLevel
+        self.prompt = prompt
+        self.cwd = cwd
+        self.transcriptPath = transcriptPath
     }
 }
 

@@ -171,4 +171,74 @@ struct IPCProtocolTests {
         let answers = decoded.updatedInput?["answers"]?.value as? [String: Any]
         #expect(answers?["Pick one"] as? String == "A")
     }
+
+    @Test("HookMessage decodes prompt field")
+    func hookMessageDecodesPrompt() throws {
+        let json = """
+        {"hook_event_name":"UserPromptSubmit","session_id":"s1","prompt":"Hello world"}
+        """
+        let decoded = try IPCProtocol.decodeHookMessage(from: Data(json.utf8))
+        #expect(decoded.prompt == "Hello world")
+    }
+
+    @Test("HookMessage decodes cwd field")
+    func hookMessageDecodesCwd() throws {
+        let json = """
+        {"hook_event_name":"SessionStart","session_id":"s2","cwd":"/Users/test/project"}
+        """
+        let decoded = try IPCProtocol.decodeHookMessage(from: Data(json.utf8))
+        #expect(decoded.cwd == "/Users/test/project")
+    }
+
+    @Test("HookMessage decodes transcript_path field")
+    func hookMessageDecodesTranscriptPath() throws {
+        let json = """
+        {"hook_event_name":"SessionStart","session_id":"s3","transcript_path":"/tmp/sessions/abc.jsonl"}
+        """
+        let decoded = try IPCProtocol.decodeHookMessage(from: Data(json.utf8))
+        #expect(decoded.transcriptPath == "/tmp/sessions/abc.jsonl")
+    }
+
+    @Test("HookMessage missing new fields decode as nil")
+    func hookMessageMissingNewFields() throws {
+        let json = """
+        {"hook_event_name":"Stop","session_id":"s4"}
+        """
+        let decoded = try IPCProtocol.decodeHookMessage(from: Data(json.utf8))
+        #expect(decoded.prompt == nil)
+        #expect(decoded.cwd == nil)
+        #expect(decoded.transcriptPath == nil)
+    }
+
+    @Test("HookResponse.question with multi-answer encodes comma-separated value")
+    func hookResponseQuestionMultipleAnswers() throws {
+        let originalInput: [String: AnyCodable] = [
+            "questions": AnyCodable([
+                [
+                    "question": "Which features?",
+                    "multiSelect": true,
+                    "options": [
+                        ["label": "Auth"],
+                        ["label": "DB"],
+                        ["label": "Cache"],
+                    ],
+                ]
+            ])
+        ]
+        let resp = HookResponse.question(
+            answers: ["Which features?": "Auth, Cache"],
+            originalInput: originalInput
+        )
+        let data = try JSONEncoder().encode(resp)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        let output = json["hookSpecificOutput"] as! [String: Any]
+        let decision = output["decision"] as! [String: Any]
+        #expect(decision["behavior"] as? String == "allow")
+
+        let updatedInput = decision["updatedInput"] as! [String: Any]
+        let answers = updatedInput["answers"] as! [String: Any]
+        #expect(answers["Which features?"] as? String == "Auth, Cache")
+        #expect(updatedInput["questions"] != nil)
+    }
 }

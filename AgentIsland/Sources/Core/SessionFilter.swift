@@ -3,6 +3,9 @@ import Foundation
 enum SessionFilter {
     static let builtInPatterns = [
         "Memory Consolidation",
+        "Memory Writer",
+        "Guardian-AutoReview",
+        "Chronicle Summary",
         "claude-mem",
         "background sync",
     ]

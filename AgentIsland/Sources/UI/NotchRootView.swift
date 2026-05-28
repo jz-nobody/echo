@@ -42,9 +42,8 @@ struct NotchRootView: View {
                     sessions: sessionManager.sessions,
                     confirmationQueue: confirmationQueue,
                     onSessionTap: { session in
-                        if windowActivator.jumpToSession(session) {
-                            panelState.collapse()
-                        }
+                        _ = windowActivator.jumpToSession(session)
+                        panelState.collapse()
                     },
                     onAddToFilter: { keyword in
                         guard !panelState.settingsStore.filterKeywords.contains(keyword) else { return }

@@ -3,7 +3,19 @@ import Foundation
 import Darwin
 #endif
 
-let socketPath = "/tmp/agent-island.sock"
+let sourceSocketMap: [String: String] = [
+    "claude": "/tmp/agent-island.sock",
+    "codex": "/tmp/agent-island-codex.sock",
+    "qoderwork": "/tmp/agent-island-qoderwork.sock",
+]
+
+var source = "claude"
+if let idx = CommandLine.arguments.firstIndex(of: "--source"),
+   idx + 1 < CommandLine.arguments.count {
+    source = CommandLine.arguments[idx + 1]
+}
+
+let socketPath = sourceSocketMap[source] ?? "/tmp/agent-island.sock"
 let fallback = #"{"decision":"ask"}"#
 
 let inputData = FileHandle.standardInput.readDataToEndOfFile()

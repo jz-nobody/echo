@@ -157,4 +157,40 @@ struct ConfirmationQueueTests {
         #expect(queue.isEmpty)
         #expect(queue.currentItem == nil)
     }
+
+    @Test("update populates choice-type confirmation with multiSelect")
+    @MainActor
+    func updatePopulatesChoiceConfirmation() {
+        let queue = ConfirmationQueue()
+        let session = makeSession(id: "s1")
+        let choiceConf = PendingConfirmation(
+            id: "choice-1",
+            type: .choice,
+            title: "Which features?",
+            details: .choice(ChoiceDetails(
+                question: "Which features?",
+                header: "Features",
+                options: [
+                    ChoiceOption(id: "Auth", label: "Auth", description: "Authentication"),
+                    ChoiceOption(id: "DB", label: "DB", description: "Database"),
+                ],
+                multiSelect: true
+            )),
+            timestamp: Date()
+        )
+
+        queue.update(from: ["s1": [choiceConf]], sessions: [session])
+
+        #expect(queue.count == 1)
+        #expect(queue.currentItem?.confirmation.id == "choice-1")
+        #expect(queue.currentItem?.confirmation.type == .choice)
+
+        if case .choice(let details) = queue.currentItem?.confirmation.details {
+            #expect(details.multiSelect == true)
+            #expect(details.options.count == 2)
+            #expect(details.question == "Which features?")
+        } else {
+            Issue.record("Expected .choice details")
+        }
+    }
 }

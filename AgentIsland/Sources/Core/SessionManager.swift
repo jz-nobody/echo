@@ -8,11 +8,10 @@ final class SessionManager {
     private(set) var isPolling = false
     let health: AdaptorHealth
 
-    private let adaptors: [any AgentAdaptor]
+    private let bridgeServer: BridgeServer
     private var pollTask: Task<Void, Never>?
     let pollInterval: TimeInterval
     let idlePollInterval: TimeInterval
-    let retryPolicy: RetryPolicy
     private let settingsStore: SettingsStore
     private let soundPlayer: (any SoundPlayable)?
     private let eventDetector = SessionEventDetector()
@@ -31,19 +30,17 @@ final class SessionManager {
     }
 
     init(
-        adaptors: [any AgentAdaptor],
+        bridgeServer: BridgeServer,
         settingsStore: SettingsStore,
         pollInterval: TimeInterval = 1.0,
         idlePollInterval: TimeInterval = 5.0,
-        retryPolicy: RetryPolicy = .standard,
         health: AdaptorHealth = AdaptorHealth(),
         soundPlayer: (any SoundPlayable)? = nil
     ) {
-        self.adaptors = adaptors
+        self.bridgeServer = bridgeServer
         self.settingsStore = settingsStore
         self.pollInterval = pollInterval
         self.idlePollInterval = idlePollInterval
-        self.retryPolicy = retryPolicy
         self.health = health
         self.soundPlayer = soundPlayer
     }
@@ -64,7 +61,7 @@ final class SessionManager {
             }
         }
         confirmationObserver = NotificationCenter.default.addObserver(
-            forName: ClaudeCodeAdaptor.confirmationReceivedNotification,
+            forName: BridgeServer.confirmationReceivedNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -73,7 +70,7 @@ final class SessionManager {
             }
         }
         statusObserver = NotificationCenter.default.addObserver(
-            forName: ClaudeCodeAdaptor.statusChangedNotification,
+            forName: BridgeServer.statusChangedNotification,
             object: nil,
             queue: .main
         ) { [weak self] notification in
@@ -102,11 +99,9 @@ final class SessionManager {
         confirmation: PendingConfirmation,
         response: ConfirmationResponse
     ) async throws {
-        for adaptor in adaptors where adaptor.agentType == session.agentType {
-            try await adaptor.respond(session: session, confirmation: confirmation, response: response)
-        }
+        try await bridgeServer.respond(confirmationId: confirmation.id, response: response)
         switch response {
-        case .allow, .select:
+        case .allow, .select, .multiSelect, .freeText:
             soundPlayer?.play(.confirmationApproved)
         case .deny:
             soundPlayer?.play(.confirmationDenied)
@@ -115,9 +110,7 @@ final class SessionManager {
     }
 
     func revokeAutoApprove(session: AgentSession) async {
-        for adaptor in adaptors where adaptor.agentType == session.agentType {
-            await adaptor.revokeAutoApprove(session: session)
-        }
+        await bridgeServer.revokeAutoApprove(sessionId: session.id)
         await pollOnce()
     }
 
@@ -164,54 +157,22 @@ final class SessionManager {
     }
 
     func pollOnce() async {
-        var newSessions: [AgentSession] = []
-        var newConfirmations: [String: [PendingConfirmation]] = [:]
+        let discovered = await bridgeServer.discoverAllSessions()
+        let confs = await bridgeServer.getAllPendingConfirmations()
 
-        for adaptor in adaptors {
-            let type = adaptor.agentType
-            guard health.shouldPoll(for: type) else { continue }
-
-            guard await adaptor.isAvailable else {
-                health.recordFailure(for: type)
-                continue
-            }
-
-            do {
-                let discovered = try await retryPolicy.execute {
-                    try await adaptor.discoverSessions()
-                }
-                health.recordSuccess(for: type)
-
-                for var session in discovered {
-                    if let status = try? await adaptor.getStatus(session: session) {
-                        session.status = status
-                    }
-                    if session.status == .waitingConfirmation {
-                        if let confs = try? await adaptor.getPendingConfirmations(session: session) {
-                            newConfirmations[session.id] = confs
-                        }
-                    }
-                    newSessions.append(session)
-                }
-            } catch {
-                health.recordFailure(for: type)
-                continue
-            }
-        }
-
-        let filteredSessions = SessionFilter.apply(to: newSessions, settings: settingsStore)
-        mergeSessions(filteredSessions, confirmations: newConfirmations)
+        let filteredSessions = SessionFilter.apply(to: discovered, settings: settingsStore)
 
         let events = eventDetector.detect(
-            sessions: newSessions,
-            confirmations: newConfirmations,
+            sessions: filteredSessions,
+            confirmations: confs,
             health: health
         )
         for event in events {
             soundPlayer?.play(event)
         }
 
-        checkIdleReminders(sessions: newSessions)
+        mergeSessions(filteredSessions, confirmations: confs)
+        checkIdleReminders(sessions: filteredSessions)
     }
 
     private func mergeSessions(
