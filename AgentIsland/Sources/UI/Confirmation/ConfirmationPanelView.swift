@@ -34,7 +34,9 @@ struct ConfirmationPanelView: View {
             ChoicePanelView(
                 details: details,
                 agentType: item.session.agentType,
-                onSelect: { optionId in onRespond(item, .select(optionId: optionId)) }
+                onSelect: { optionId in onRespond(item, .select(optionId: optionId)) },
+                onMultiSelect: { optionIds in onRespond(item, .multiSelect(optionIds: optionIds)) },
+                onFreeText: { text in onRespond(item, .freeText(text)) }
             )
         }
     }

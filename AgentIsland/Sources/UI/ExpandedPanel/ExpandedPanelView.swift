@@ -98,7 +98,9 @@ struct ExpandedPanelView: View {
             ChoicePanelView(
                 details: details,
                 agentType: session.agentType,
-                onSelect: { onRespond(item, .select(optionId: $0)) }
+                onSelect: { onRespond(item, .select(optionId: $0)) },
+                onMultiSelect: { onRespond(item, .multiSelect(optionIds: $0)) },
+                onFreeText: { onRespond(item, .freeText($0)) }
             )
         }
     }
