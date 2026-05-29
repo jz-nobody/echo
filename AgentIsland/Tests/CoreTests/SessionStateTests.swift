@@ -75,11 +75,11 @@ struct SessionStateTests {
         #expect(state.status == .idle)
     }
 
-    @Test("11. Stop transitions to idle")
-    func stopToIdle() {
+    @Test("11. Stop transitions to completed")
+    func stopToCompleted() {
         var state = SessionState(status: .executing)
         state.apply(.stop)
-        #expect(state.status == .idle)
+        #expect(state.status == .completed)
     }
 
     @Test("12. PreCompact transitions to compacting")
@@ -107,11 +107,11 @@ struct SessionStateTests {
         #expect(state.status == .executing)
     }
 
-    @Test("15. StopFailure transitions to idle")
-    func stopFailureToIdle() {
+    @Test("15. StopFailure transitions to completed")
+    func stopFailureToCompleted() {
         var state = SessionState(status: .executing)
         state.apply(.stopFailure)
-        #expect(state.status == .idle)
+        #expect(state.status == .completed)
     }
 
     @Test("waitingConfirmation protected from userPromptSubmit")
@@ -139,7 +139,7 @@ struct SessionStateTests {
     func stopOverridesWaiting() {
         var state = SessionState(status: .waitingConfirmation)
         state.apply(.stop)
-        #expect(state.status == .idle)
+        #expect(state.status == .completed)
     }
 
     @Test("subagentStart transitions to executing when not actionable")

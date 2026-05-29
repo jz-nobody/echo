@@ -154,7 +154,7 @@ struct BridgeServerTests {
         let msg2 = makeHookMessage(type: "Stop", sessionId: sid)
         await server.handleClaudeStatusHook(message: msg2, sessionId: internalId, respond: respond)
         let s2 = await server.sessions[internalId]
-        #expect(s2?.status == .idle)
+        #expect(s2?.status == .completed)
     }
 
     @Test("6. UserPromptSubmit transitions to executing")
@@ -203,7 +203,7 @@ struct BridgeServerTests {
 
         let sessions = await server.sessions
         #expect(sessions["claudeCode-shared-id"]?.status == .executing)
-        #expect(sessions["qoderWork-shared-id"]?.status == .idle)
+        #expect(sessions["qoderWork-shared-id"]?.status == .completed)
     }
 
     @Test("9. Session IDs namespaced by agent type")

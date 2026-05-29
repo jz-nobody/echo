@@ -23,7 +23,7 @@ struct ConfirmationQueueTests {
             id: id,
             type: .permission,
             title: "Edit file",
-            details: .permission(PermissionDetails(operation: "edit", diff: [], additions: 1, deletions: 0)),
+            details: .permission(PermissionDetails(toolName: "Edit", operation: "edit", diff: [], additions: 1, deletions: 0)),
             timestamp: Date().addingTimeInterval(-secondsAgo)
         )
     }

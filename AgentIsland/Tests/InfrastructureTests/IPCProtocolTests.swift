@@ -210,6 +210,43 @@ struct IPCProtocolTests {
         #expect(decoded.transcriptPath == nil)
     }
 
+    @Test("HookResponse.allowAlways encodes updatedPermissions in decision")
+    func hookResponseAllowAlwaysFormat() throws {
+        let resp = HookResponse.allowAlways(toolName: "Bash")
+        let data = try JSONEncoder().encode(resp)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        #expect(json["continue"] as? Bool == true)
+        #expect(json["suppressOutput"] as? Bool == true)
+        let output = json["hookSpecificOutput"] as! [String: Any]
+        #expect(output["hookEventName"] as? String == "PermissionRequest")
+        let decision = output["decision"] as! [String: Any]
+        #expect(decision["behavior"] as? String == "allow")
+        #expect(decision["updatedInput"] == nil)
+
+        let perms = decision["updatedPermissions"] as! [[String: Any]]
+        #expect(perms.count == 1)
+        #expect(perms[0]["type"] as? String == "addRules")
+        #expect(perms[0]["destination"] as? String == "session")
+        #expect(perms[0]["behavior"] as? String == "allow")
+        let rules = perms[0]["rules"] as! [[String: Any]]
+        #expect(rules.count == 1)
+        #expect(rules[0]["toolName"] as? String == "Bash")
+    }
+
+    @Test("HookResponse.allowAlways roundtrip preserves updatedPermissions")
+    func hookResponseAllowAlwaysRoundtrip() throws {
+        let resp = HookResponse.allowAlways(toolName: "Edit")
+        let data = try IPCProtocol.encode(resp)
+        let decoded = try IPCProtocol.decodeHookResponse(from: data)
+
+        #expect(decoded.decision == "allow")
+        #expect(decoded.updatedPermissions != nil)
+        #expect(decoded.updatedPermissions?.count == 1)
+        #expect(decoded.updatedPermissions?[0]["type"]?.value as? String == "addRules")
+        #expect(decoded.updatedPermissions?[0]["destination"]?.value as? String == "session")
+    }
+
     @Test("HookResponse.question with multi-answer encodes comma-separated value")
     func hookResponseQuestionMultipleAnswers() throws {
         let originalInput: [String: AnyCodable] = [

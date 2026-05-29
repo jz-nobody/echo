@@ -34,11 +34,17 @@ enum DesignTokens {
     // MARK: - Confirmation
     static let diffAdded = Color(nsColor: NSColor(hex: "#30D158"))
     static let diffRemoved = Color(nsColor: NSColor(hex: "#FF453A"))
-    static let choiceOptionBackground = Color(nsColor: NSColor(hex: "#1E3A3A"))
     static let shortcutBadgeBackground = Color(nsColor: NSColor(hex: "#3A3A3C"))
     static let confirmationAllowBackground = Color.white
     static let confirmationAllowText = Color.black
     static let confirmationDenyBackground = Color(nsColor: NSColor(hex: "#3A3A3C"))
+    static let choiceHeaderBackground = Color(nsColor: NSColor(hex: "#E8E8ED"))
+
+    // MARK: - Content Container
+    static let contentContainerBackground = Color.black.opacity(0.3)
+    static let contentContainerRadius: CGFloat = 6
+    static let optionRowHover = Color.white.opacity(0.06)
+    static let optionRowMinHeight: CGFloat = 36
 
     // MARK: - Task & Subagent
     static let todoInProgress = Color(nsColor: NSColor(hex: "#0A84FF"))
@@ -76,8 +82,6 @@ enum DesignTokens {
     static let panelCornerRadius: CGFloat = 12
     static let confirmationButtonHeight: CGFloat = 44
     static let confirmationButtonRadius: CGFloat = 8
-    static let optionCardHeight: CGFloat = 44
-    static let optionCardRadius: CGFloat = 8
 }
 
 enum AnimationConstants {
@@ -90,4 +94,6 @@ enum AnimationConstants {
 
     static let hoverDelay: TimeInterval = 0.15
     static let autoReminderDuration: TimeInterval = 5.0
+    static let optionStagger = Animation.easeOut(duration: 0.25)
+    static let optionStaggerDelay: TimeInterval = 0.04
 }

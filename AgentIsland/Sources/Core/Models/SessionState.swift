@@ -65,7 +65,7 @@ struct SessionState: Sendable, Equatable {
             isCompacting = true
 
         case .stop, .stopFailure:
-            status = .idle
+            status = .completed
             isCompacting = false
 
         case .subagentStart:

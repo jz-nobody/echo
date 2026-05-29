@@ -133,7 +133,24 @@ final class WindowController: NSObject {
 
             guard let current = self.confirmationQueue.currentItem else { return event }
 
-            if flags == .command, let chars = event.charactersIgnoringModifiers {
+            guard let chars = event.charactersIgnoringModifiers else { return event }
+
+            if flags == [.command, .shift], chars == "y" {
+                if current.confirmation.type == .permission,
+                   case .permission(let details) = current.confirmation.details {
+                    self.handleConfirmationResponse(current, .allowAlways(toolName: details.toolName))
+                    return nil
+                }
+            }
+
+            if flags == [.command, .shift], chars == "a" {
+                if current.confirmation.type == .permission {
+                    self.handleConfirmationResponse(current, .autoApprove)
+                    return nil
+                }
+            }
+
+            if flags == .command {
                 switch chars {
                 case "y":
                     if current.confirmation.type == .permission {

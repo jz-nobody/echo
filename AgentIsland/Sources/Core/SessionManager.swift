@@ -99,12 +99,21 @@ final class SessionManager {
         confirmation: PendingConfirmation,
         response: ConfirmationResponse
     ) async throws {
+        if case .autoApprove = response {
+            try await bridgeServer.respond(confirmationId: confirmation.id, response: .allow)
+            await bridgeServer.enableAutoApprove(sessionId: session.id)
+            soundPlayer?.play(.confirmationApproved)
+            await pollOnce()
+            return
+        }
         try await bridgeServer.respond(confirmationId: confirmation.id, response: response)
         switch response {
-        case .allow, .select, .multiSelect, .freeText:
+        case .allow, .allowAlways, .select, .multiSelect, .freeText:
             soundPlayer?.play(.confirmationApproved)
         case .deny:
             soundPlayer?.play(.confirmationDenied)
+        case .autoApprove:
+            break
         }
         await pollOnce()
     }
@@ -186,11 +195,7 @@ final class SessionManager {
 
         for i in sessions.indices {
             guard let disc = discoveredMap[sessions[i].id] else { continue }
-            let hookStatus = sessions[i].status
             sessions[i] = disc
-            if hookStatus.priority > disc.status.priority {
-                sessions[i].status = hookStatus
-            }
         }
 
         let existingIDs = Set(sessions.map(\.id))

@@ -4,6 +4,7 @@ actor BridgeServer {
 
     static let confirmationReceivedNotification = Notification.Name("AgentIsland.confirmationReceived")
     static let statusChangedNotification = Notification.Name("AgentIsland.statusChanged")
+    static let sessionVisibilityTimeout: TimeInterval = 172800
 
     // Agent registry
     let agentConfigs: [String: AgentConfig]
@@ -27,6 +28,7 @@ actor BridgeServer {
     var sessionWatcher: SessionFileWatcher?
     var sessionFiles: [String: ClaudeSessionFile] = [:]
     var revokedAutoApprove: Set<String> = []
+    var localAutoApprove: Set<String> = []
     var cachedTodos: [String: [TodoItem]] = [:]
 
     // QoderWork-specific
@@ -35,6 +37,7 @@ actor BridgeServer {
     var activeSubagents: [String: [SubagentInfo]] = [:]
     var transcriptPaths: [String: String] = [:]
     var qoderWorkChatIds: [String: String] = [:]
+    var chatToWorkspace: [String: String] = [:]
 
     // Config
     let confirmationTimeout: TimeInterval
@@ -45,6 +48,14 @@ actor BridgeServer {
         }
         return (config.hookSettingsPath as NSString)
             .deletingLastPathComponent + "/sessions"
+    }
+
+    var qoderWorkProjectsPath: String {
+        guard let config = agentConfigs["qoderwork"] else {
+            return NSHomeDirectory() + "/.qoderwork/projects"
+        }
+        return (config.hookSettingsPath as NSString)
+            .deletingLastPathComponent + "/projects"
     }
 
     init(
@@ -98,11 +109,23 @@ actor BridgeServer {
         }
 
         cleanupQoderWorkDeadSessions()
-        deduplicateQoderWorkByTitle()
+        discoverQoderWorkSessions()
         enrichAllQoderWorkTranscripts()
+        deduplicateQoderWorkByTitle()
         refreshClaudeConversationData()
 
-        return sessions.values.filter { !backgroundSessionIds.contains($0.id) }
+        let now = Date()
+        return sessions.values
+            .filter { !backgroundSessionIds.contains($0.id) }
+            .filter { session in
+                let lastActivity = lastActivityDates[session.id] ?? session.lastUpdate
+                return now.timeIntervalSince(lastActivity) < Self.sessionVisibilityTimeout
+            }
+            .sorted { a, b in
+                let aTime = lastActivityDates[a.id] ?? a.lastUpdate
+                let bTime = lastActivityDates[b.id] ?? b.lastUpdate
+                return aTime > bTime
+            }
     }
 
     func getAllPendingConfirmations() -> [String: [PendingConfirmation]] {
@@ -116,8 +139,10 @@ actor BridgeServer {
 
     func revokeAutoApprove(sessionId: String) {
         revokedAutoApprove.insert(sessionId)
+        localAutoApprove.remove(sessionId)
         sessions[sessionId]?.permissionMode = nil
     }
+
 
     // MARK: - Internal Helpers
 

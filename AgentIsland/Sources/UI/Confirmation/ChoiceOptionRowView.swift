@@ -10,29 +10,32 @@ struct ChoiceOptionRowView: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 10) {
-                shortcutBadge
+                indexBadge
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(option.label)
-                        .font(.system(size: 14))
+                        .font(.system(size: 13))
                         .foregroundStyle(DesignTokens.textPrimary)
-                        .lineLimit(1)
+                        .lineLimit(3)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if let desc = option.description {
                         Text(desc)
                             .font(.system(size: 11))
                             .foregroundStyle(DesignTokens.textSecondary)
-                            .lineLimit(1)
+                            .lineLimit(3)
+                            .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
                 Spacer()
             }
-            .frame(height: DesignTokens.optionCardHeight)
-            .padding(.horizontal, 12)
-            .background(DesignTokens.choiceOptionBackground)
-            .brightness(isHovered ? 0.1 : 0)
-            .clipShape(RoundedRectangle(cornerRadius: DesignTokens.optionCardRadius, style: .continuous))
+            .frame(minHeight: DesignTokens.optionRowMinHeight)
+            .padding(.horizontal, 8)
+            .background(isHovered ? Color.white.opacity(0.08) : Color.clear)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(optionAccessibilityLabel)
@@ -50,13 +53,15 @@ struct ChoiceOptionRowView: View {
         return label
     }
 
-    private var shortcutBadge: some View {
-        Text("⌘\(index + 1)")
-            .font(.system(size: 11, weight: .medium, design: .monospaced))
+    private var indexBadge: some View {
+        let letter = index < 26 ? String(UnicodeScalar(65 + index)!) : "\(index + 1)"
+        return Text(letter)
+            .font(.system(size: 11, weight: .medium, design: .rounded))
             .foregroundStyle(DesignTokens.textSecondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(DesignTokens.shortcutBadgeBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .frame(width: 20, height: 20)
+            .overlay(
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+            )
     }
 }

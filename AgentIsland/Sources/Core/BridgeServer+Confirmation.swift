@@ -8,6 +8,12 @@ extension BridgeServer {
     ) {
         let toolName = message.toolName ?? "Unknown"
         let toolInput = message.toolInput ?? [:]
+
+        if localAutoApprove.contains(sessionId) && toolName != "AskUserQuestion" {
+            respond(HookResponse(decision: "allow", reason: nil))
+            return
+        }
+
         let confId = "\(sessionId)-\(toolName)-\(Int(Date().timeIntervalSince1970 * 1000))"
 
         if toolName == "AskUserQuestion", let choiceDetails = parseAskUserQuestion(toolInput) {
@@ -26,6 +32,7 @@ extension BridgeServer {
         let confirmation = PendingConfirmation(
             id: confId, type: .permission, title: operation,
             details: .permission(PermissionDetails(
+                toolName: toolName,
                 operation: operation, diff: buildDiff(from: toolInput),
                 additions: 0, deletions: 0
             )),
@@ -77,6 +84,24 @@ extension BridgeServer {
             if case .deny = response { isDeny = true } else { isDeny = false }
             let event: SessionEvent = isDeny ? .permissionDenied : .permissionApproved
             applyEvent(event, sessionId: sessionId)
+        }
+    }
+
+    func enableAutoApprove(sessionId: String) {
+        localAutoApprove.insert(sessionId)
+        revokedAutoApprove.remove(sessionId)
+        sessions[sessionId]?.permissionMode = "autoApprove"
+
+        let toRespond = confirmationToSession
+            .filter { $0.value == sessionId }
+            .map(\.key)
+            .filter { confId in
+                if let conf = pendingConfirmations[confId] { return conf.type == .permission }
+                return false
+            }
+        for confId in toRespond {
+            responseCallbacks[confId]?(HookResponse(decision: "allow", reason: nil))
+            cleanupConfirmation(confId)
         }
     }
 
@@ -170,6 +195,10 @@ extension BridgeServer {
     private func buildHookResponse(for response: ConfirmationResponse, confirmationId: String) -> HookResponse {
         switch response {
         case .allow:
+            return HookResponse(decision: "allow", reason: nil)
+        case .allowAlways(let toolName):
+            return .allowAlways(toolName: toolName)
+        case .autoApprove:
             return HookResponse(decision: "allow", reason: nil)
         case .deny:
             return HookResponse(decision: "deny", reason: "Denied via Agent Island")

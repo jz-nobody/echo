@@ -46,11 +46,17 @@ struct HookResponse: Sendable, Equatable {
     let decision: String?
     let reason: String?
     let updatedInput: [String: AnyCodable]?
+    let updatedPermissions: [[String: AnyCodable]]?
 
-    init(decision: String?, reason: String?, updatedInput: [String: AnyCodable]? = nil) {
+    init(
+        decision: String?, reason: String?,
+        updatedInput: [String: AnyCodable]? = nil,
+        updatedPermissions: [[String: AnyCodable]]? = nil
+    ) {
         self.decision = decision
         self.reason = reason
         self.updatedInput = updatedInput
+        self.updatedPermissions = updatedPermissions
     }
 
     static let empty = HookResponse(decision: nil, reason: nil)
@@ -67,6 +73,17 @@ struct HookResponse: Sendable, Equatable {
         var updated = originalInput
         updated["answers"] = AnyCodable(Dictionary(uniqueKeysWithValues: answers.map { ($0.key, $0.value) }))
         return HookResponse(decision: "allow", reason: nil, updatedInput: updated)
+    }
+
+    static func allowAlways(toolName: String) -> HookResponse {
+        let rule: [String: AnyCodable] = ["toolName": AnyCodable(toolName)]
+        let update: [String: AnyCodable] = [
+            "type": AnyCodable("addRules"),
+            "destination": AnyCodable("session"),
+            "rules": AnyCodable([rule]),
+            "behavior": AnyCodable("allow"),
+        ]
+        return HookResponse(decision: "allow", reason: nil, updatedPermissions: [update])
     }
 }
 
@@ -85,13 +102,18 @@ extension HookResponse: Codable {
             try container.encode(true, forKey: .suppressOutput)
             var output: [String: Any] = ["hookEventName": "PermissionRequest"]
             if decision == "allow" {
+                var decisionDict: [String: Any] = ["behavior": "allow"]
                 if let updatedInput {
                     let inputData = try JSONEncoder().encode(updatedInput)
                     let inputObj = try JSONSerialization.jsonObject(with: inputData)
-                    output["decision"] = ["behavior": "allow", "updatedInput": inputObj]
-                } else {
-                    output["decision"] = ["behavior": "allow"]
+                    decisionDict["updatedInput"] = inputObj
                 }
+                if let updatedPermissions {
+                    let permsData = try JSONEncoder().encode(updatedPermissions)
+                    let permsObj = try JSONSerialization.jsonObject(with: permsData)
+                    decisionDict["updatedPermissions"] = permsObj
+                }
+                output["decision"] = decisionDict
             } else {
                 var deny: [String: Any] = ["behavior": "deny"]
                 if let reason { deny["message"] = reason }
@@ -109,6 +131,7 @@ extension HookResponse: Codable {
             decision = topDecision
             reason = try container.decodeIfPresent(String.self, forKey: .reason)
             updatedInput = nil
+            updatedPermissions = nil
         } else if let output = try container.decodeIfPresent(AnyCodable.self, forKey: .hookSpecificOutput),
                   let dict = output.value as? [String: Any],
                   let decisionDict = dict["decision"] as? [String: Any],
@@ -121,10 +144,17 @@ extension HookResponse: Codable {
             } else {
                 updatedInput = nil
             }
+            if let permsArray = decisionDict["updatedPermissions"] as? [[String: Any]] {
+                let data = try JSONSerialization.data(withJSONObject: permsArray)
+                updatedPermissions = try JSONDecoder().decode([[String: AnyCodable]].self, from: data)
+            } else {
+                updatedPermissions = nil
+            }
         } else {
             decision = nil
             reason = nil
             updatedInput = nil
+            updatedPermissions = nil
         }
     }
 }

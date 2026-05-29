@@ -433,6 +433,204 @@ struct BridgeServerConfirmationTests {
         #expect(captured?.decision == "allow")
     }
 
+    // MARK: - Always Allow
+
+    @Test("Always Allow sends updatedPermissions in response")
+    func respondAllowAlwaysSendsUpdatedPermissions() async throws {
+        let server = try makeBridgeServer()
+        let clientID = UUID()
+        var capturedResponse: HookResponse?
+        let respond: @Sendable (HookResponse) -> Void = { capturedResponse = $0 }
+
+        let msg = makePermissionMessage(toolName: "Bash")
+        await server.handlePermissionRequest(
+            message: msg, sessionId: "claudeCode-s1", clientID: clientID, respond: respond
+        )
+
+        let confs = await server.pendingConfirmations
+        let confId = confs.keys.first!
+
+        try await server.respond(confirmationId: confId, response: .allowAlways(toolName: "Bash"))
+
+        #expect(capturedResponse?.decision == "allow")
+        #expect(capturedResponse?.updatedPermissions != nil)
+
+        let perms = capturedResponse!.updatedPermissions!
+        #expect(perms.count == 1)
+        #expect(perms[0]["type"]?.value as? String == "addRules")
+        #expect(perms[0]["destination"]?.value as? String == "session")
+        #expect(perms[0]["behavior"]?.value as? String == "allow")
+    }
+
+    @Test("Always Allow transitions to executing like regular allow")
+    func allowAlwaysTransitionsToExecuting() async throws {
+        let server = try makeBridgeServer()
+        let clientID = UUID()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let startMsg = HookMessage(
+            type: "UserPromptSubmit", sessionId: "s1",
+            toolName: nil, toolInput: nil, permissionLevel: nil
+        )
+        await server.handleClaudeStatusHook(
+            message: startMsg, sessionId: "claudeCode-s1", respond: respond
+        )
+
+        let permMsg = makePermissionMessage()
+        await server.handlePermissionRequest(
+            message: permMsg, sessionId: "claudeCode-s1", clientID: clientID, respond: respond
+        )
+        let s1 = await server.sessions["claudeCode-s1"]
+        #expect(s1?.status == .waitingConfirmation)
+
+        let confs = await server.pendingConfirmations
+        let confId = confs.keys.first!
+        try await server.respond(confirmationId: confId, response: .allowAlways(toolName: "Bash"))
+
+        let s2 = await server.sessions["claudeCode-s1"]
+        #expect(s2?.status == .executing)
+    }
+
+    // MARK: - Auto Approve
+
+    @Test("Auto approve short-circuits new PermissionRequests")
+    func autoApproveShortCircuits() async throws {
+        let server = try makeBridgeServer()
+        let respond1 = { @Sendable (_: HookResponse) in }
+
+        let startMsg = HookMessage(
+            type: "UserPromptSubmit", sessionId: "s1",
+            toolName: nil, toolInput: nil, permissionLevel: nil
+        )
+        await server.handleClaudeStatusHook(
+            message: startMsg, sessionId: "claudeCode-s1", respond: respond1
+        )
+
+        await server.enableAutoApprove(sessionId: "claudeCode-s1")
+
+        var capturedResponse: HookResponse?
+        let respond2: @Sendable (HookResponse) -> Void = { capturedResponse = $0 }
+
+        let msg = makePermissionMessage()
+        await server.handlePermissionRequest(
+            message: msg, sessionId: "claudeCode-s1", clientID: UUID(), respond: respond2
+        )
+
+        #expect(capturedResponse?.decision == "allow")
+        let confs = await server.pendingConfirmations
+        #expect(confs.isEmpty)
+    }
+
+    @Test("Auto approve drains queued permission confirmations")
+    func autoApproveDrainsQueue() async throws {
+        let server = try makeBridgeServer()
+        var responses: [HookResponse] = []
+        let respond: @Sendable (HookResponse) -> Void = { responses.append($0) }
+
+        let msg1 = makePermissionMessage(sessionId: "s1", toolName: "Bash")
+        await server.handlePermissionRequest(
+            message: msg1, sessionId: "claudeCode-s1", clientID: UUID(), respond: respond
+        )
+        let msg2 = makePermissionMessage(sessionId: "s1", toolName: "Edit")
+        await server.handlePermissionRequest(
+            message: msg2, sessionId: "claudeCode-s1", clientID: UUID(), respond: respond
+        )
+
+        let confsBefore = await server.pendingConfirmations
+        #expect(confsBefore.count == 2)
+
+        await server.enableAutoApprove(sessionId: "claudeCode-s1")
+
+        let confsAfter = await server.pendingConfirmations
+        #expect(confsAfter.isEmpty)
+        #expect(responses.count == 2)
+        #expect(responses.allSatisfy { $0.decision == "allow" })
+    }
+
+    @Test("Auto approve does not drain AskUserQuestion confirmations")
+    func autoApproveSkipsChoiceConfirmations() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let permMsg = makePermissionMessage(sessionId: "s1", toolName: "Bash")
+        await server.handlePermissionRequest(
+            message: permMsg, sessionId: "claudeCode-s1", clientID: UUID(), respond: respond
+        )
+
+        let choiceMsg = makeAskUserQuestionMessage(sessionId: "s1")
+        await server.handlePermissionRequest(
+            message: choiceMsg, sessionId: "claudeCode-s1", clientID: UUID(), respond: respond
+        )
+
+        let confsBefore = await server.pendingConfirmations
+        #expect(confsBefore.count == 2)
+
+        await server.enableAutoApprove(sessionId: "claudeCode-s1")
+
+        let confsAfter = await server.pendingConfirmations
+        #expect(confsAfter.count == 1)
+        let remaining = confsAfter.values.first!
+        #expect(remaining.type == .choice)
+    }
+
+    @Test("Revoke auto approve clears local flag")
+    func revokeAutoApproveClearsLocal() async throws {
+        let server = try makeBridgeServer()
+        await server.enableAutoApprove(sessionId: "claudeCode-s1")
+
+        let flagBefore = await server.localAutoApprove.contains("claudeCode-s1")
+        #expect(flagBefore)
+
+        await server.revokeAutoApprove(sessionId: "claudeCode-s1")
+
+        let flagAfter = await server.localAutoApprove.contains("claudeCode-s1")
+        #expect(!flagAfter)
+    }
+
+    @Test("After revoke, new PermissionRequests queue normally")
+    func afterRevokeRequestsQueueAgain() async throws {
+        let server = try makeBridgeServer()
+        await server.enableAutoApprove(sessionId: "claudeCode-s1")
+        await server.revokeAutoApprove(sessionId: "claudeCode-s1")
+
+        let respond = { @Sendable (_: HookResponse) in }
+        let msg = makePermissionMessage()
+        await server.handlePermissionRequest(
+            message: msg, sessionId: "claudeCode-s1", clientID: UUID(), respond: respond
+        )
+
+        let confs = await server.pendingConfirmations
+        #expect(confs.count == 1)
+    }
+
+    @Test("Auto approve does not short-circuit AskUserQuestion")
+    func autoApproveDoesNotShortCircuitChoice() async throws {
+        let server = try makeBridgeServer()
+        await server.enableAutoApprove(sessionId: "claudeCode-s1")
+
+        let respond = { @Sendable (_: HookResponse) in }
+        let msg = makeAskUserQuestionMessage(sessionId: "s1")
+        await server.handlePermissionRequest(
+            message: msg, sessionId: "claudeCode-s1", clientID: UUID(), respond: respond
+        )
+
+        let confs = await server.pendingConfirmations
+        #expect(confs.count == 1)
+        let conf = confs.values.first!
+        #expect(conf.type == .choice)
+    }
+
+    @Test("enableAutoApprove sets permissionMode on session")
+    func enableAutoApproveSetsPermissionMode() async throws {
+        let server = try makeBridgeServer()
+        await server.ensureSessionExists(id: "claudeCode-s1", agentType: .claudeCode, title: "Test")
+
+        await server.enableAutoApprove(sessionId: "claudeCode-s1")
+
+        let session = await server.sessions["claudeCode-s1"]
+        #expect(session?.permissionMode == "autoApprove")
+    }
+
     // MARK: - Respond to Nonexistent Confirmation
 
     @Test("15. Responding to unknown confirmation throws")

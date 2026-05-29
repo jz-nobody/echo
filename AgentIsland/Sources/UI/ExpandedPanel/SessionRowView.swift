@@ -70,10 +70,7 @@ struct SessionRowView: View {
             .offset(x: -4)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.title)
-                    .font(.system(size: showsInlineStatus ? 13 : 14,
-                                  weight: showsInlineStatus ? .medium : .semibold))
-                    .foregroundStyle(.white)
+                titleText
                     .lineLimit(1)
                 if let text = inlineStatusText {
                     Text(text)
@@ -82,15 +79,6 @@ struct SessionRowView: View {
                 }
             }
             .layoutPriority(1)
-
-            if let desc = session.sessionDescription {
-                Text(desc)
-                    .font(.system(size: showsInlineStatus ? 13 : 14,
-                                  weight: showsInlineStatus ? .medium : .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
 
             Spacer(minLength: 4)
 
@@ -202,8 +190,8 @@ struct SessionRowView: View {
 
     private var shouldShowCompressedTag: Bool {
         guard session.isConversationCompressed,
-              let compressedAt = session.compressedAt else { return false }
-        return Date().timeIntervalSince(compressedAt) < 30
+              let count = session.entriesSinceCompact else { return false }
+        return count < 4
     }
 
     @ViewBuilder
@@ -246,6 +234,7 @@ struct SessionRowView: View {
             .padding(.horizontal, 5)
             .background(DesignTokens.tagAutoApproveBackground.opacity(0.15))
             .clipShape(Capsule())
+            .fixedSize()
             .onHover { hovering in
                 withAnimation(.easeInOut(duration: 0.15)) {
                     autoApproveHovered = hovering
@@ -262,6 +251,7 @@ struct SessionRowView: View {
             .padding(.horizontal, 5)
             .background(tagColor)
             .clipShape(Capsule())
+            .fixedSize()
     }
 
     private func terminalTag(_ info: TerminalInfo) -> some View {
@@ -272,6 +262,7 @@ struct SessionRowView: View {
             .padding(.horizontal, 5)
             .background(DesignTokens.tagTerminalBackground)
             .clipShape(Capsule())
+            .fixedSize()
     }
 
     private var timeTag: some View {
@@ -282,6 +273,7 @@ struct SessionRowView: View {
             .padding(.horizontal, 5)
             .background(DesignTokens.textSecondary.opacity(0.12))
             .clipShape(Capsule())
+            .fixedSize()
     }
 
     private var relativeTime: String {
@@ -293,6 +285,28 @@ struct SessionRowView: View {
     }
 
     // MARK: - Helpers
+
+    private var titleText: Text {
+        let size: CGFloat = showsInlineStatus ? 13 : 14
+
+        let project = Text(session.title)
+            .font(.system(size: size, weight: .semibold))
+            .foregroundColor(.white)
+
+        guard let desc = session.sessionDescription else {
+            return project
+        }
+
+        let sep = Text(" · ")
+            .font(.system(size: size - 1, weight: .regular))
+            .foregroundColor(.white.opacity(0.3))
+
+        let topic = Text(desc)
+            .font(.system(size: size - 1, weight: .regular))
+            .foregroundColor(.white.opacity(0.5))
+
+        return project + sep + topic
+    }
 
     private var agentLabel: String {
         AgentColorRegistry.shared.label(for: session.agentType)

@@ -5,6 +5,7 @@ extension BridgeServer {
 
     static let qoderWorkIdleTimeout: TimeInterval = 300
     static let qoderWorkStaleTimeout: TimeInterval = 120
+    static let qoderWorkRecencyWindow: TimeInterval = 86400
     static let qoderWorkBundleId = "com.qoder.work"
 
     func handleQoderWorkPermissionRequest(
@@ -12,31 +13,32 @@ extension BridgeServer {
         clientPID: pid_t?, clientID: UUID,
         respond: @escaping @Sendable (HookResponse) -> Void
     ) {
-        ensureQoderWorkSession(hookSessionId: message.sessionId, cwd: message.cwd)
-        updateQoderWorkTerminalInfo(sessionId: sessionId, clientPID: clientPID)
-        checkIfQoderWorkBackground(sessionId: sessionId, clientPID: clientPID)
-        recordActivity(sessionId: sessionId)
-        storeTranscriptPath(message, sessionId: sessionId)
+        let wsId = resolveWorkspaceSessionId(message: message, chatSessionId: sessionId)
+        ensureQoderWorkSession(wsSessionId: wsId, cwd: message.cwd)
+        updateQoderWorkTerminalInfo(sessionId: wsId, clientPID: clientPID)
+        checkIfQoderWorkBackground(sessionId: wsId, clientPID: clientPID)
+        recordActivity(sessionId: wsId)
+        storeTranscriptPath(message, sessionId: wsId)
 
         if message.toolName == "AskUserQuestion",
            let choiceDetails = parseAskUserQuestion(message.toolInput ?? [:]) {
-            let confId = "\(sessionId)-AskUserQuestion-\(Int(Date().timeIntervalSince1970 * 1000))"
+            let confId = "\(wsId)-AskUserQuestion-\(Int(Date().timeIntervalSince1970 * 1000))"
             let confirmation = PendingConfirmation(
                 id: confId, type: .choice, title: choiceDetails.question,
                 details: .choice(choiceDetails), timestamp: Date()
             )
             pendingConfirmations[confId] = confirmation
-            confirmationToSession[confId] = sessionId
+            confirmationToSession[confId] = wsId
             clientToConfirmation[clientID] = confId
             questionInputs[confId] = message.toolInput ?? [:]
             qoderWorkChatIds[confId] = extractQoderWorkChatId(from: message.cwd)
             respond(.empty)
-            applyEvent(.permissionRequest, sessionId: sessionId)
+            applyEvent(.permissionRequest, sessionId: wsId)
             NotificationCenter.default.post(name: Self.confirmationReceivedNotification, object: nil)
             return
         }
 
-        handlePermissionRequest(message: message, sessionId: sessionId, clientID: clientID, respond: respond)
+        handlePermissionRequest(message: message, sessionId: wsId, clientID: clientID, respond: respond)
     }
 
     func handleQoderWorkStatusHook(
@@ -44,11 +46,12 @@ extension BridgeServer {
         clientPID: pid_t?,
         respond: @escaping @Sendable (HookResponse) -> Void
     ) {
-        ensureQoderWorkSession(hookSessionId: message.sessionId, cwd: message.cwd)
-        updateQoderWorkTerminalInfo(sessionId: sessionId, clientPID: clientPID)
-        checkIfQoderWorkBackground(sessionId: sessionId, clientPID: clientPID)
-        recordActivity(sessionId: sessionId)
-        storeTranscriptPath(message, sessionId: sessionId)
+        let wsId = resolveWorkspaceSessionId(message: message, chatSessionId: sessionId)
+        ensureQoderWorkSession(wsSessionId: wsId, cwd: message.cwd)
+        updateQoderWorkTerminalInfo(sessionId: wsId, clientPID: clientPID)
+        checkIfQoderWorkBackground(sessionId: wsId, clientPID: clientPID)
+        recordActivity(sessionId: wsId)
+        storeTranscriptPath(message, sessionId: wsId)
 
         let event: SessionEvent
         switch message.type {
@@ -56,57 +59,133 @@ extension BridgeServer {
             event = .userPromptSubmit
             if let prompt = message.prompt {
                 let cleaned = stripSystemReminders(prompt)
-                sessions[sessionId]?.lastUserPrompt = cleaned
-                if sessions[sessionId]?.title == "QoderWork" {
-                    sessions[sessionId]?.title = truncateTitle(cleaned)
+                sessions[wsId]?.lastUserPrompt = cleaned
+                if sessions[wsId]?.title == "QoderWork" {
+                    sessions[wsId]?.title = truncateTitle(cleaned)
                 }
             }
         case "PreToolUse":
             event = .preToolUse(toolName: message.toolName)
             let toolName = message.toolName ?? "Unknown"
             let toolInput = message.toolInput ?? [:]
-            sessions[sessionId]?.currentToolCall = summarizeToolInput(name: toolName, input: toolInput)
+            sessions[wsId]?.currentToolCall = summarizeToolInput(name: toolName, input: toolInput)
             if toolName == "TodoWrite" {
-                sessions[sessionId]?.todos = parseTodos(from: toolInput)
+                sessions[wsId]?.todos = parseTodos(from: toolInput)
             }
             if toolName == "Agent" {
-                addSubagent(sessionId: sessionId, from: toolInput)
+                addSubagent(sessionId: wsId, from: toolInput)
             }
         case "PostToolUse":
             event = .postToolUse
-            sessions[sessionId]?.currentToolCall = nil
+            sessions[wsId]?.currentToolCall = nil
         case "Stop":
             event = .stop
-            sessions[sessionId]?.currentToolCall = nil
+            sessions[wsId]?.currentToolCall = nil
         case "SessionStart":
             event = .sessionStart
         case "SubagentStart":
             event = .subagentStart
         case "SubagentStop":
             event = .subagentStop
-            completeLastSubagent(sessionId: sessionId)
+            completeLastSubagent(sessionId: wsId)
         default:
             respond(.empty)
             return
         }
 
         if event.indicatesPostConfirmationProgress {
-            clearStaleInteraction(for: sessionId)
+            clearStaleInteraction(for: wsId)
         }
 
-        applyEvent(event, sessionId: sessionId)
+        applyEvent(event, sessionId: wsId)
         respond(.empty)
     }
+
+    // MARK: - File-Based Discovery
+
+    func discoverQoderWorkSessions() {
+        let fm = FileManager.default
+        let projectsDir = qoderWorkProjectsPath
+        guard fm.fileExists(atPath: projectsDir) else { return }
+        guard let dirNames = try? fm.contentsOfDirectory(atPath: projectsDir) else { return }
+
+        let now = Date()
+
+        for dirName in dirNames {
+            let dirPath = (projectsDir as NSString).appendingPathComponent(dirName)
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: dirPath, isDirectory: &isDir), isDir.boolValue else { continue }
+
+            guard let files = try? fm.contentsOfDirectory(atPath: dirPath) else { continue }
+
+            let jsonlFiles = files.filter { $0.hasSuffix(".jsonl") }
+            guard !jsonlFiles.isEmpty else { continue }
+
+            let internalId = internalSessionId(agentType: .qoderWork, hookSessionId: dirName)
+
+            var latestDate: Date?
+            var latestPath: String?
+            for filename in jsonlFiles {
+                let jsonlPath = (dirPath as NSString).appendingPathComponent(filename)
+                guard let attrs = try? fm.attributesOfItem(atPath: jsonlPath),
+                      let modDate = attrs[.modificationDate] as? Date else { continue }
+                if latestDate == nil || modDate > latestDate! {
+                    latestDate = modDate
+                    latestPath = jsonlPath
+                }
+                let chatId = String(filename.dropLast(6))
+                chatToWorkspace[chatId] = internalId
+            }
+
+            guard let modDate = latestDate,
+                  now.timeIntervalSince(modDate) < Self.qoderWorkRecencyWindow else { continue }
+
+            if let path = latestPath {
+                transcriptPaths[internalId] = path
+            }
+
+            guard sessions[internalId] == nil else { continue }
+
+            let title = readWorkspaceTitle(dirPath: dirPath, files: files)
+                ?? deriveTitle(from: "/" + dirName.replacingOccurrences(of: "-", with: "/"))
+            let startTime = readEarliestCreatedAt(dirPath: dirPath, files: files) ?? modDate
+
+            sessions[internalId] = AgentSession(
+                id: internalId, agentType: .qoderWork, title: title,
+                status: .idle, startTime: startTime, lastUpdate: modDate,
+                terminalInfo: nil, currentToolCall: nil
+            )
+            lastActivityDates[internalId] = modDate
+
+            if !isUserWorkspace(dirPath: dirPath, files: files) {
+                backgroundSessionIds.insert(internalId)
+            }
+        }
+    }
+
+    private func hasQoderWorkTranscriptFile(_ sessionId: String) -> Bool {
+        guard let path = transcriptPaths[sessionId] else { return false }
+        return FileManager.default.fileExists(atPath: path)
+    }
+
+    // MARK: - Cleanup
 
     func cleanupQoderWorkDeadSessions() {
         var toRemove: [String] = []
         let now = Date()
         for (id, session) in sessions where session.agentType == .qoderWork {
+            let hasFile = hasQoderWorkTranscriptFile(id)
+
             if let pid = session.terminalInfo?.pid, !isProcessAlive(pid) {
-                toRemove.append(id)
+                if hasFile {
+                    applyEvent(.processTerminated, sessionId: id)
+                    sessions[id]?.terminalInfo = nil
+                } else {
+                    toRemove.append(id)
+                }
                 continue
             }
-            if session.status.isActive, session.terminalInfo?.pid == nil,
+            if session.status.isActive,
                let lastActivity = lastActivityDates[id],
                now.timeIntervalSince(lastActivity) > Self.qoderWorkStaleTimeout {
                 applyEvent(.processTerminated, sessionId: id)
@@ -115,7 +194,9 @@ extension BridgeServer {
             if session.terminalInfo?.pid == nil,
                let lastActivity = lastActivityDates[id],
                now.timeIntervalSince(lastActivity) > Self.qoderWorkIdleTimeout {
-                toRemove.append(id)
+                if !hasFile {
+                    toRemove.append(id)
+                }
             }
         }
         for id in toRemove {
@@ -126,6 +207,7 @@ extension BridgeServer {
     func deduplicateQoderWorkByTitle() {
         var titleToSessions: [String: [(id: String, lastActivity: Date)]] = [:]
         for (id, session) in sessions where session.agentType == .qoderWork {
+            if hasQoderWorkTranscriptFile(id) { continue }
             let activity = lastActivityDates[id] ?? session.startTime
             titleToSessions[session.title, default: []].append((id: id, lastActivity: activity))
         }
@@ -146,10 +228,24 @@ extension BridgeServer {
 
     // MARK: - Private
 
-    private func ensureQoderWorkSession(hookSessionId: String, cwd: String? = nil) {
-        let id = internalSessionId(agentType: .qoderWork, hookSessionId: hookSessionId)
+    private func ensureQoderWorkSession(wsSessionId: String, cwd: String? = nil) {
         let title = deriveTitle(from: cwd)
-        ensureSessionExists(id: id, agentType: .qoderWork, title: title, cwd: cwd)
+        ensureSessionExists(id: wsSessionId, agentType: .qoderWork, title: title, cwd: cwd)
+    }
+
+    func resolveWorkspaceSessionId(message: HookMessage, chatSessionId: String) -> String {
+        if let cached = chatToWorkspace[message.sessionId] { return cached }
+
+        if let tp = message.transcriptPath, !tp.isEmpty {
+            let dirName = ((tp as NSString).deletingLastPathComponent as NSString).lastPathComponent
+            if dirName != "/" && dirName != "." {
+                let wsId = internalSessionId(agentType: .qoderWork, hookSessionId: dirName)
+                chatToWorkspace[message.sessionId] = wsId
+                return wsId
+            }
+        }
+
+        return chatSessionId
     }
 
     private func updateQoderWorkTerminalInfo(sessionId: String, clientPID: pid_t?) {
@@ -201,6 +297,10 @@ extension BridgeServer {
     }
 
     private func removeQoderWorkSession(_ id: String) {
+        let chatsForWorkspace = chatToWorkspace.filter { $0.value == id }.map(\.key)
+        for chatId in chatsForWorkspace {
+            chatToWorkspace.removeValue(forKey: chatId)
+        }
         activeSubagents.removeValue(forKey: id)
         transcriptPaths.removeValue(forKey: id)
         backgroundSessionIds.remove(id)
@@ -229,6 +329,41 @@ extension BridgeServer {
             let active = snap.subagents.filter { !$0.isComplete }
             sessions[sessionId]?.subagents = active.isEmpty ? nil : active
         }
+    }
+
+    private func readWorkspaceTitle(dirPath: String, files: [String]) -> String? {
+        let sessionFiles = files.filter { $0.hasSuffix("-session.json") }
+        guard !sessionFiles.isEmpty else { return nil }
+
+        var candidates: [(title: String, createdAt: Int64)] = []
+        for filename in sessionFiles {
+            let path = (dirPath as NSString).appendingPathComponent(filename)
+            guard let data = FileManager.default.contents(atPath: path),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let title = json["title"] as? String,
+                  let createdAt = json["created_at"] as? Int64,
+                  !title.isEmpty, title != "New Session" else { continue }
+            candidates.append((title, createdAt))
+        }
+
+        guard let earliest = candidates.min(by: { $0.createdAt < $1.createdAt }) else { return nil }
+        return truncateTitle(earliest.title)
+    }
+
+    private func readEarliestCreatedAt(dirPath: String, files: [String]) -> Date? {
+        let sessionFiles = files.filter { $0.hasSuffix("-session.json") }
+        var earliest: Int64?
+        for filename in sessionFiles {
+            let path = (dirPath as NSString).appendingPathComponent(filename)
+            guard let data = FileManager.default.contents(atPath: path),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let createdAt = json["created_at"] as? Int64 else { continue }
+            if earliest == nil || createdAt < earliest! {
+                earliest = createdAt
+            }
+        }
+        guard let ts = earliest else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(ts) / 1000.0)
     }
 
 
@@ -272,6 +407,17 @@ extension BridgeServer {
     private func extractQoderWorkChatId(from cwd: String?) -> String? {
         guard let cwd, cwd.contains("/.qoderwork/workspace/") else { return nil }
         return (cwd as NSString).lastPathComponent
+    }
+
+    private func isUserWorkspace(dirPath: String, files: [String]) -> Bool {
+        for filename in files where filename.hasSuffix("-session.json") {
+            let path = (dirPath as NSString).appendingPathComponent(filename)
+            guard let data = FileManager.default.contents(atPath: path),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let wd = json["working_dir"] as? String else { continue }
+            return wd.contains(".qoderwork/workspace") || wd.contains("QoderWork/workspace")
+        }
+        return false
     }
 
     private func deriveTitle(from cwd: String?) -> String {

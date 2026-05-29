@@ -19,6 +19,7 @@ enum ConfirmationDetails: Sendable, Equatable {
 }
 
 struct PermissionDetails: Sendable, Equatable {
+    let toolName: String
     let operation: String
     let diff: [DiffLine]
     let additions: Int

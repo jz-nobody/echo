@@ -28,6 +28,8 @@ struct ConfirmationPanelView: View {
             PermissionPanelView(
                 details: details,
                 onAllow: { onRespond(item, .allow) },
+                onAllowAlways: { onRespond(item, .allowAlways(toolName: details.toolName)) },
+                onAutoApprove: { onRespond(item, .autoApprove) },
                 onDeny: { onRespond(item, .deny) }
             )
         case .choice(let details):

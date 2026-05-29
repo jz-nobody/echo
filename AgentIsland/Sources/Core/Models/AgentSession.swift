@@ -24,7 +24,7 @@ struct AgentSession: Identifiable, Sendable, Equatable {
     var subagents: [SubagentInfo]?
     var permissionMode: String?
     var isConversationCompressed: Bool = false
-    var compressedAt: Date?
+    var entriesSinceCompact: Int?
 }
 
 struct TerminalInfo: Sendable, Equatable {

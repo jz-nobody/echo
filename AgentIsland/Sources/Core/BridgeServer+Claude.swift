@@ -93,14 +93,16 @@ extension BridgeServer {
             session.sessionDescription = snap.sessionDescription
             session.lastUserPrompt = snap.lastUserPrompt
             session.lastAssistantMessage = snap.lastAssistantMessage
-            session.permissionMode = revokedAutoApprove.contains(id) ? nil : snap.permissionMode
-
-            if snap.isConversationCompressed && !session.isConversationCompressed {
-                session.compressedAt = Date()
-            } else if !snap.isConversationCompressed {
-                session.compressedAt = nil
+            if localAutoApprove.contains(id) {
+                session.permissionMode = "autoApprove"
+            } else if revokedAutoApprove.contains(id) {
+                session.permissionMode = nil
+            } else {
+                session.permissionMode = snap.permissionMode
             }
+
             session.isConversationCompressed = snap.isConversationCompressed
+            session.entriesSinceCompact = snap.entriesSinceCompact
 
             if !snap.todos.isEmpty { cachedTodos[id] = snap.todos }
             let activeSubagents = snap.subagents.filter { !$0.isComplete }

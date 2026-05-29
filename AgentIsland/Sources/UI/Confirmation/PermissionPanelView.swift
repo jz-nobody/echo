@@ -3,9 +3,11 @@ import SwiftUI
 struct PermissionPanelView: View {
     let details: PermissionDetails
     let onAllow: () -> Void
+    let onAllowAlways: () -> Void
+    let onAutoApprove: () -> Void
     let onDeny: () -> Void
 
-    private var toolName: String {
+    private var displayToolName: String {
         let parts = details.operation.split(separator: ":", maxSplits: 1)
         return String(parts.first ?? "Permission")
     }
@@ -21,7 +23,7 @@ struct PermissionPanelView: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(DesignTokens.statusWaiting)
-                Text(toolName)
+                Text(displayToolName)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(DesignTokens.textPrimary)
             }
@@ -32,8 +34,8 @@ struct PermissionPanelView: View {
                 .lineLimit(3)
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.black.opacity(0.3))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .background(DesignTokens.contentContainerBackground)
+                .clipShape(RoundedRectangle(cornerRadius: DesignTokens.contentContainerRadius, style: .continuous))
 
             if !details.diff.isEmpty {
                 diffArea
@@ -58,8 +60,8 @@ struct PermissionPanelView: View {
             .padding(8)
         }
         .frame(maxHeight: 140)
-        .background(Color.black.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .background(DesignTokens.contentContainerBackground)
+        .clipShape(RoundedRectangle(cornerRadius: DesignTokens.contentContainerRadius, style: .continuous))
         .accessibilityLabel("Code diff, \(details.additions) additions, \(details.deletions) deletions")
     }
 
@@ -89,7 +91,7 @@ struct PermissionPanelView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("允许一次, ⌘Y")
 
-            Button(action: onAllow) {
+            Button(action: onAllowAlways) {
                 Text("始终允许")
                     .font(.system(size: 12, weight: .medium))
                     .frame(maxWidth: .infinity)
@@ -99,19 +101,19 @@ struct PermissionPanelView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("始终允许")
+            .accessibilityLabel("始终允许, ⌘⇧Y")
 
-            Button(action: onAllow) {
+            Button(action: onAutoApprove) {
                 Text("自动批准")
                     .font(.system(size: 12, weight: .medium))
                     .frame(maxWidth: .infinity)
                     .frame(height: 36)
-                    .background(Color(nsColor: NSColor(hex: "#FF453A")))
+                    .background(DesignTokens.tagAutoApproveBackground)
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("自动批准")
+            .accessibilityLabel("自动批准, ⌘⇧A")
         }
     }
 }

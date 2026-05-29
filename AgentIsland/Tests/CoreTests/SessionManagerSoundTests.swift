@@ -33,7 +33,7 @@ struct SessionManagerSoundTests {
             type: .permission,
             title: "Edit file",
             details: .permission(PermissionDetails(
-                operation: "edit", diff: [], additions: 1, deletions: 0
+                toolName: "Edit", operation: "edit", diff: [], additions: 1, deletions: 0
             )),
             timestamp: Date()
         )
@@ -138,6 +138,23 @@ struct SessionManagerSoundTests {
             session: session, confirmation: conf,
             response: .multiSelect(optionIds: ["opt1", "opt2"])
         )
+
+        #expect(soundPlayer.playedEvents.contains(.confirmationApproved))
+    }
+
+    @Test("respond autoApprove triggers confirmationApproved")
+    @MainActor
+    func respondAutoApproveTriggersApproved() async throws {
+        let server = try makeMockBridgeServer()
+        let soundPlayer = MockSoundPlayer()
+        let manager = SessionManager(bridgeServer: server, settingsStore: makeSettings(), soundPlayer: soundPlayer)
+
+        let session = makeSession()
+        let conf = makeConfirmation()
+        await server.injectSession(session)
+        await server.injectConfirmation(conf, sessionId: session.id)
+
+        try await manager.respond(session: session, confirmation: conf, response: .autoApprove)
 
         #expect(soundPlayer.playedEvents.contains(.confirmationApproved))
     }
