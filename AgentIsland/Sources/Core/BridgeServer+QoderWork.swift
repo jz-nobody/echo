@@ -4,7 +4,7 @@ import Foundation
 extension BridgeServer {
 
     static let qoderWorkIdleTimeout: TimeInterval = 300
-    static let qoderWorkStaleTimeout: TimeInterval = 120
+    static let processDeathMaxRetries = 3
     static let qoderWorkRecencyWindow: TimeInterval = 86400
     static let qoderWorkBundleId = "com.qoder.work"
 
@@ -21,7 +21,7 @@ extension BridgeServer {
         storeTranscriptPath(message, sessionId: wsId)
 
         if message.toolName == "AskUserQuestion",
-           let choiceDetails = parseAskUserQuestion(message.toolInput ?? [:]) {
+           let choiceDetails = parseAllAskUserQuestions(message.toolInput ?? [:]).first {
             let confId = "\(wsId)-AskUserQuestion-\(Int(Date().timeIntervalSince1970 * 1000))"
             let confirmation = PendingConfirmation(
                 id: confId, type: .choice, title: choiceDetails.question,
@@ -47,16 +47,15 @@ extension BridgeServer {
         respond: @escaping @Sendable (HookResponse) -> Void
     ) {
         let wsId = resolveWorkspaceSessionId(message: message, chatSessionId: sessionId)
+        NSLog("[QoderWork] statusHook: type=%@ chatSessionId=%@ wsId=%@ transcriptPath=%@", message.type, sessionId, wsId, message.transcriptPath ?? "-")
         ensureQoderWorkSession(wsSessionId: wsId, cwd: message.cwd)
         updateQoderWorkTerminalInfo(sessionId: wsId, clientPID: clientPID)
         checkIfQoderWorkBackground(sessionId: wsId, clientPID: clientPID)
         recordActivity(sessionId: wsId)
         storeTranscriptPath(message, sessionId: wsId)
 
-        let event: SessionEvent
         switch message.type {
         case "UserPromptSubmit":
-            event = .userPromptSubmit
             if let prompt = message.prompt {
                 let cleaned = stripSystemReminders(prompt)
                 sessions[wsId]?.lastUserPrompt = cleaned
@@ -64,8 +63,10 @@ extension BridgeServer {
                     sessions[wsId]?.title = truncateTitle(cleaned)
                 }
             }
+            clearStaleInteraction(for: wsId)
+            applyEvent(.userPromptSubmit, sessionId: wsId)
+
         case "PreToolUse":
-            event = .preToolUse(toolName: message.toolName)
             let toolName = message.toolName ?? "Unknown"
             let toolInput = message.toolInput ?? [:]
             sessions[wsId]?.currentToolCall = summarizeToolInput(name: toolName, input: toolInput)
@@ -75,29 +76,32 @@ extension BridgeServer {
             if toolName == "Agent" {
                 addSubagent(sessionId: wsId, from: toolInput)
             }
+            clearStaleInteraction(for: wsId)
+
         case "PostToolUse":
-            event = .postToolUse
             sessions[wsId]?.currentToolCall = nil
+            clearStaleInteraction(for: wsId)
+
         case "Stop":
-            event = .stop
             sessions[wsId]?.currentToolCall = nil
+            clearStaleInteraction(for: wsId)
+            applyEvent(.turnCompleted, sessionId: wsId)
+
         case "SessionStart":
-            event = .sessionStart
+            applyEvent(.sessionStart, sessionId: wsId)
+
         case "SubagentStart":
-            event = .subagentStart
+            applyEvent(.subagentStart, sessionId: wsId)
+
         case "SubagentStop":
-            event = .subagentStop
             completeLastSubagent(sessionId: wsId)
+            applyEvent(.subagentStop, sessionId: wsId)
+
         default:
             respond(.empty)
             return
         }
 
-        if event.indicatesPostConfirmationProgress {
-            clearStaleInteraction(for: wsId)
-        }
-
-        applyEvent(event, sessionId: wsId)
         respond(.empty)
     }
 
@@ -150,10 +154,12 @@ extension BridgeServer {
                 ?? deriveTitle(from: "/" + dirName.replacingOccurrences(of: "-", with: "/"))
             let startTime = readEarliestCreatedAt(dirPath: dirPath, files: files) ?? modDate
 
+            let qwPID = findQoderWorkAppPID()
             sessions[internalId] = AgentSession(
                 id: internalId, agentType: .qoderWork, title: title,
                 status: .idle, startTime: startTime, lastUpdate: modDate,
-                terminalInfo: nil, currentToolCall: nil
+                terminalInfo: TerminalInfo(appName: "QoderWork", pid: qwPID, windowId: nil),
+                currentToolCall: nil
             )
             lastActivityDates[internalId] = modDate
 
@@ -176,23 +182,26 @@ extension BridgeServer {
         for (id, session) in sessions where session.agentType == .qoderWork {
             let hasFile = hasQoderWorkTranscriptFile(id)
 
-            if let pid = session.terminalInfo?.pid, !isProcessAlive(pid) {
-                if hasFile {
-                    applyEvent(.processTerminated, sessionId: id)
-                    sessions[id]?.terminalInfo = nil
+            if let pid = session.terminalInfo?.pid {
+                if !isProcessAlive(pid) {
+                    let retries = processDeathRetries[id, default: 0] + 1
+                    processDeathRetries[id] = retries
+                    if retries >= Self.processDeathMaxRetries {
+                        if hasFile {
+                            applyEvent(.processTerminated, sessionId: id)
+                            sessions[id]?.terminalInfo = nil
+                        } else {
+                            toRemove.append(id)
+                        }
+                        processDeathRetries.removeValue(forKey: id)
+                    }
                 } else {
-                    toRemove.append(id)
+                    processDeathRetries.removeValue(forKey: id)
                 }
                 continue
             }
-            if session.status.isActive,
-               let lastActivity = lastActivityDates[id],
-               now.timeIntervalSince(lastActivity) > Self.qoderWorkStaleTimeout {
-                applyEvent(.processTerminated, sessionId: id)
-                continue
-            }
-            if session.terminalInfo?.pid == nil,
-               let lastActivity = lastActivityDates[id],
+
+            if let lastActivity = lastActivityDates[id],
                now.timeIntervalSince(lastActivity) > Self.qoderWorkIdleTimeout {
                 if !hasFile {
                     toRemove.append(id)
@@ -305,6 +314,7 @@ extension BridgeServer {
         transcriptPaths.removeValue(forKey: id)
         backgroundSessionIds.remove(id)
         sessionClientPIDs.removeValue(forKey: id)
+        processDeathRetries.removeValue(forKey: id)
         removeSession(id)
     }
 
@@ -367,11 +377,11 @@ extension BridgeServer {
     }
 
 
-    private func isProcessAlive(_ pid: pid_t) -> Bool {
+    func isProcessAlive(_ pid: pid_t) -> Bool {
         kill(pid, 0) == 0
     }
 
-    private func addSubagent(sessionId: String, from input: [String: AnyCodable]) {
+    func addSubagent(sessionId: String, from input: [String: AnyCodable]) {
         let description = (input["description"]?.value as? String) ?? "Subagent"
         let agentType = (input["subagent_type"]?.value as? String) ?? "general"
         let id = "\(sessionId)-sub-\(Int(Date().timeIntervalSince1970 * 1000))"
@@ -380,7 +390,7 @@ extension BridgeServer {
         sessions[sessionId]?.subagents = activeSubagents[sessionId]?.filter { !$0.isComplete }
     }
 
-    private func completeLastSubagent(sessionId: String) {
+    func completeLastSubagent(sessionId: String) {
         guard var subs = activeSubagents[sessionId], !subs.isEmpty,
               let idx = subs.lastIndex(where: { !$0.isComplete }) else { return }
         subs[idx] = SubagentInfo(
@@ -392,7 +402,7 @@ extension BridgeServer {
         sessions[sessionId]?.subagents = active.isEmpty ? nil : active
     }
 
-    private func parseTodos(from input: [String: AnyCodable]) -> [TodoItem]? {
+    func parseTodos(from input: [String: AnyCodable]) -> [TodoItem]? {
         guard let todosRaw = input["todos"]?.value as? [[String: Any]] else { return nil }
         let items = todosRaw.compactMap { raw -> TodoItem? in
             guard let content = raw["content"] as? String,
@@ -431,14 +441,14 @@ extension BridgeServer {
         return lastComponent
     }
 
-    private func truncateTitle(_ text: String) -> String {
+    func truncateTitle(_ text: String) -> String {
         let firstLine = text.components(separatedBy: .newlines).first ?? text
         let trimmed = firstLine.trimmingCharacters(in: .whitespaces)
         if trimmed.count <= 40 { return trimmed }
         return String(trimmed.prefix(37)) + "..."
     }
 
-    private func stripSystemReminders(_ text: String) -> String {
+    func stripSystemReminders(_ text: String) -> String {
         var result = text
         while let startRange = result.range(of: "<system-reminder>") {
             if let endRange = result.range(of: "</system-reminder>", range: startRange.upperBound..<result.endIndex) {

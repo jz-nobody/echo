@@ -5,6 +5,7 @@ import Foundation
 final class PanelState {
     private(set) var isExpanded = false
     private(set) var wasAutoExpandedForConfirmation = false
+    var autoExpandedAt: Date?
     var showQuitConfirmation = false
     private var expandTimer: Timer?
     private var collapseTimer: Timer?
@@ -34,6 +35,14 @@ final class PanelState {
     func mouseEntered() {
         collapseTimer?.invalidate()
         collapseTimer = nil
+
+        if autoExpandedAt != nil {
+            autoExpandedAt = nil
+            autoCollapseTimer?.invalidate()
+            autoCollapseTimer = nil
+            return
+        }
+
         autoCollapseTimer?.invalidate()
         autoCollapseTimer = nil
         expandTimer?.invalidate()
@@ -47,10 +56,9 @@ final class PanelState {
     func mouseExited() {
         expandTimer?.invalidate()
         expandTimer = nil
+        if autoExpandedAt != nil { return }
         guard settingsStore.autoCollapseOnMouseExit else { return }
         guard !wasAutoExpandedForConfirmation else { return }
-        collapseTimer?.invalidate()
-        collapseTimer = nil
         collapse()
     }
 
@@ -65,6 +73,7 @@ final class PanelState {
         autoCollapseTimer?.invalidate()
         autoCollapseTimer = nil
         wasAutoExpandedForConfirmation = false
+        autoExpandedAt = nil
         isExpanded = true
         onExpandChange?()
     }
@@ -78,6 +87,7 @@ final class PanelState {
         expandTimer = nil
         showQuitConfirmation = false
         wasAutoExpandedForConfirmation = false
+        autoExpandedAt = nil
         isExpanded = false
         onExpandChange?()
     }
@@ -87,10 +97,12 @@ final class PanelState {
         collapseTimer?.invalidate()
         collapseTimer = nil
         autoCollapseTimer?.invalidate()
+        autoExpandedAt = Date()
         isExpanded = true
         onExpandChange?()
         autoCollapseTimer = Timer.scheduledTimer(withTimeInterval: autoCollapseDelay, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
+                self?.autoExpandedAt = nil
                 self?.collapse()
             }
         }

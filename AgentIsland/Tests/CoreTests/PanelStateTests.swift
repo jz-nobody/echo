@@ -74,23 +74,57 @@ struct PanelStateTests {
     }
 
     @MainActor
-    @Test("mouseEntered cancels auto-collapse timer")
+    @Test("mouseEntered after autoExpand cancels auto-collapse timer")
     func mouseEnteredCancelsAutoCollapse() {
-        let state = PanelState(settingsStore: makeStore(), autoCollapseDelay: 0.1)
+        let state = PanelState(settingsStore: makeStore(), autoCollapseDelay: 10.0)
         state.autoExpand()
         state.mouseEntered()
+        #expect(state.autoExpandedAt == nil)
+        #expect(state.isExpanded == true)
+    }
+
+    @MainActor
+    @Test("mouseEntered during autoExpand switches to hover mode")
+    func mouseEnteredDuringAutoExpandSwitchesToHover() {
+        let state = PanelState(settingsStore: makeStore(), autoCollapseDelay: 0.15)
+        state.autoExpand()
+        state.mouseEntered()
+        #expect(state.autoExpandedAt == nil)
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
         #expect(state.isExpanded == true)
     }
 
     @MainActor
-    @Test("mouseExited collapses immediately after autoExpand")
-    func mouseExitedAfterAutoExpand() {
+    @Test("mouseExited during autoExpand does not collapse immediately")
+    func mouseExitedDuringAutoExpand() {
         let store = makeStore()
         store.autoCollapseOnMouseExit = true
-        let state = PanelState(settingsStore: store, mouseExitDelay: 0.1, autoCollapseDelay: 10.0)
+        let state = PanelState(settingsStore: store, autoCollapseDelay: 10.0)
+        state.autoExpand()
+        state.mouseExited()
+        #expect(state.isExpanded == true)
+    }
+
+    @MainActor
+    @Test("autoExpand mouseEntered then mouseExited collapses immediately")
+    func autoExpandMouseEnteredThenExitedCollapses() {
+        let store = makeStore()
+        store.autoCollapseOnMouseExit = true
+        let state = PanelState(settingsStore: store, autoCollapseDelay: 10.0)
         state.autoExpand()
         state.mouseEntered()
+        state.mouseExited()
+        #expect(state.isExpanded == false)
+    }
+
+    @MainActor
+    @Test("normal hover expand not affected by autoExpandedAt")
+    func normalHoverNotAffected() {
+        let store = makeStore()
+        store.autoCollapseOnMouseExit = true
+        let state = PanelState(settingsStore: store, mouseExitDelay: 0.1)
+        state.expand()
+        #expect(state.autoExpandedAt == nil)
         state.mouseExited()
         #expect(state.isExpanded == false)
     }

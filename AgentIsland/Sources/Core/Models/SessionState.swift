@@ -14,6 +14,7 @@ enum SessionEvent: Sendable, Equatable {
     case subagentStart
     case subagentStop
     case processTerminated
+    case turnCompleted
 }
 
 struct SessionState: Sendable, Equatable {
@@ -78,6 +79,10 @@ struct SessionState: Sendable, Equatable {
         case .processTerminated:
             status = .idle
             isCompacting = false
+
+        case .turnCompleted:
+            status = .idle
+            isCompacting = false
         }
     }
 
@@ -106,7 +111,7 @@ extension SessionEvent {
 
     var indicatesPostConfirmationProgress: Bool {
         switch self {
-        case .userPromptSubmit, .preToolUse, .postToolUse, .stop, .stopFailure: true
+        case .userPromptSubmit, .preToolUse, .postToolUse, .stop, .stopFailure, .turnCompleted: true
         default: false
         }
     }

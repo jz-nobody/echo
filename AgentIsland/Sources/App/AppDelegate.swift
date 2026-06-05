@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var sessionManager: SessionManager?
     private var settingsStore: SettingsStore?
     private var bridgeServer: BridgeServer?
+    private var trialManager: TrialManager?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -28,6 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.loginItemManager = LoginItemManager()
         self.settingsStore = settings
 
+        let trial = TrialManager()
+        self.trialManager = trial
+
         let soundPlayer = SoundPlayer(settings: settings)
         let manager = SessionManager(
             bridgeServer: bridgeServer!,
@@ -43,7 +47,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sessionManager: manager,
             settingsStore: settings,
             frontmostAppMonitor: frontmostAppMonitor,
-            windowActivator: windowActivator
+            windowActivator: windowActivator,
+            trialManager: trial
         )
         windowController?.showCompactBar()
     }

@@ -5,6 +5,7 @@ enum AgentType: Sendable, Hashable {
     case claudeCode
     case codex
     case gemini
+    case qoder
     case custom(String)
 }
 

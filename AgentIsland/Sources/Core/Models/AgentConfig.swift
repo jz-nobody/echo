@@ -43,9 +43,14 @@ extension AgentConfig {
         hookSettingsPath: NSHomeDirectory() + "/.codex/hooks.json",
         hookTypes: [
             ("PermissionRequest", 86400),
-            ("SessionStart", 5),
-            ("Stop", 5),
+            ("PreToolUse", 5),
+            ("PostToolUse", 5),
             ("UserPromptSubmit", 5),
+            ("PreCompact", 5),
+            ("Stop", 5),
+            ("SessionStart", 5),
+            ("SubagentStart", 5),
+            ("SubagentStop", 5),
         ],
         requiresExistingDir: true,
         idleTimeout: 7200
@@ -69,7 +74,28 @@ extension AgentConfig {
         idleTimeout: nil
     )
 
-    static let allDefaults: [AgentConfig] = [.claude, .codex, .qoderWork]
+    static let qoder = AgentConfig(
+        agentType: .qoder,
+        tag: "qoder",
+        displayName: "Qoder",
+        socketPath: "/tmp/agent-island-qoder.sock",
+        hookSettingsPath: NSHomeDirectory() + "/.qoder/settings.json",
+        hookTypes: [
+            ("PermissionRequest", 86400),
+            ("PreToolUse", 5),
+            ("PostToolUse", 5),
+            ("UserPromptSubmit", 5),
+            ("PreCompact", 5),
+            ("Stop", 5),
+            ("SessionStart", 5),
+            ("SubagentStart", 5),
+            ("SubagentStop", 5),
+        ],
+        requiresExistingDir: true,
+        idleTimeout: nil
+    )
+
+    static let allDefaults: [AgentConfig] = [.claude, .codex, .qoderWork, .qoder]
 
     var hookConfig: HookInstaller.AgentHookConfig {
         HookInstaller.AgentHookConfig(

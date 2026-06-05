@@ -158,6 +158,7 @@ enum HookInstaller {
         claude)     SOCK="/tmp/agent-island.sock" ;;
         codex)      SOCK="/tmp/agent-island-codex.sock" ;;
         qoderwork)  SOCK="/tmp/agent-island-qoderwork.sock" ;;
+        qoder)      SOCK="/tmp/agent-island-qoder.sock" ;;
         *)          printf '%s\\n' '{"decision":"ask"}'; exit 0 ;;
     esac
     FALLBACK='{"decision":"ask"}'
@@ -173,7 +174,6 @@ enum HookInstaller {
     try:
         sock.connect(sys.argv[1])
         sock.sendall(data)
-        sock.shutdown(socket.SHUT_WR)
         resp = b""
         while True:
             chunk = sock.recv(4096)

@@ -6,8 +6,11 @@ struct NotchRootView: View {
     let confirmationQueue: ConfirmationQueue
     let frontmostAppMonitor: FrontmostAppMonitor
     let windowActivator: any WindowActivating
+    let trialManager: TrialManager
 
     @State private var previousStatuses: [String: SessionStatus] = [:]
+    @State private var userDismissedConfirmations = false
+    @State private var previousConfirmationCount = 0
 
     private struct ExpandedHeightKey: PreferenceKey {
         static let defaultValue: CGFloat = 0
@@ -37,6 +40,17 @@ struct NotchRootView: View {
                         removal: .scale(scale: 0.3, anchor: .top).combined(with: .opacity)
                     )
                 )
+            } else if panelState.isExpanded, trialManager.isLocked {
+                ActivationView(trialManager: trialManager)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(DesignTokens.panelBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.panelCornerRadius))
+                    .transition(
+                        .asymmetric(
+                            insertion: .scale(scale: 0.92, anchor: .top).combined(with: .opacity),
+                            removal: .scale(scale: 0.3, anchor: .top).combined(with: .opacity)
+                        )
+                    )
             } else if panelState.isExpanded {
                 ExpandedPanelView(
                     sessions: sessionManager.sessions,
@@ -95,6 +109,12 @@ struct NotchRootView: View {
             value: panelState.isExpanded
         )
         .onChange(of: sessionManager.totalConfirmationCount) {
+            let newCount = sessionManager.totalConfirmationCount
+            if newCount > previousConfirmationCount {
+                userDismissedConfirmations = false
+            }
+            previousConfirmationCount = newCount
+
             confirmationQueue.update(
                 from: sessionManager.pendingConfirmations,
                 sessions: sessionManager.sessions
@@ -102,7 +122,7 @@ struct NotchRootView: View {
             if !confirmationQueue.isEmpty {
                 if panelState.isExpanded {
                     panelState.cancelAutoCollapse()
-                } else {
+                } else if !userDismissedConfirmations {
                     panelState.expandForConfirmation()
                 }
             } else if panelState.wasAutoExpandedForConfirmation {
@@ -115,11 +135,18 @@ struct NotchRootView: View {
                     from: sessionManager.pendingConfirmations,
                     sessions: sessionManager.sessions
                 )
+            } else if !confirmationQueue.isEmpty {
+                userDismissedConfirmations = true
             }
         }
         .onChange(of: frontmostAppMonitor.frontmostAppPID) {
-            if !confirmationQueue.isEmpty && !panelState.isExpanded {
+            if !confirmationQueue.isEmpty && !panelState.isExpanded && !userDismissedConfirmations {
                 panelState.expandForConfirmation()
+            }
+        }
+        .onChange(of: trialManager.isLocked) {
+            if trialManager.isLocked {
+                panelState.expand()
             }
         }
         .onChange(of: sessionManager.sessions) {

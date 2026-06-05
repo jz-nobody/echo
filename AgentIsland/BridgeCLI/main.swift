@@ -7,6 +7,7 @@ let sourceSocketMap: [String: String] = [
     "claude": "/tmp/agent-island.sock",
     "codex": "/tmp/agent-island-codex.sock",
     "qoderwork": "/tmp/agent-island-qoderwork.sock",
+    "qoder": "/tmp/agent-island-qoder.sock",
 ]
 
 var source = "claude"
@@ -63,7 +64,6 @@ inputData.withUnsafeBytes { ptr in
     guard let base = ptr.baseAddress else { return }
     _ = send(fd, base, ptr.count, 0)
 }
-Darwin.shutdown(fd, SHUT_WR)
 
 var response = Data()
 var buf = [UInt8](repeating: 0, count: 4096)

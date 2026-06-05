@@ -6,9 +6,11 @@ final class SettingsWindowController {
     private var window: NSWindow?
     private var windowDelegate: WindowCloseDelegate?
     private let settingsStore: SettingsStore
+    private let trialManager: TrialManager
 
-    init(settingsStore: SettingsStore) {
+    init(settingsStore: SettingsStore, trialManager: TrialManager) {
         self.settingsStore = settingsStore
+        self.trialManager = trialManager
     }
 
     func showSettings() {
@@ -18,7 +20,7 @@ final class SettingsWindowController {
             return
         }
 
-        let rootView = SettingsRootView(store: settingsStore)
+        let rootView = SettingsRootView(store: settingsStore, trialManager: trialManager)
         let hostingView = NSHostingView(rootView: rootView)
 
         let window = NSWindow(

@@ -25,6 +25,8 @@ extension BridgeServer: IPCServerDelegate {
         clientPID: pid_t?, clientID: UUID,
         respond: @escaping @Sendable (HookResponse) -> Void
     ) {
+        NSLog("[BridgeServer] dispatchHook: tag=%@ type=%@ sessionId=%@ toolName=%@", tag, message.type, message.sessionId, message.toolName ?? "-")
+
         guard let config = agentConfigs[tag] else {
             respond(.empty)
             return
@@ -46,6 +48,12 @@ extension BridgeServer: IPCServerDelegate {
                     clientPID: clientPID, clientID: clientID,
                     respond: respond
                 )
+            case .codex:
+                handleCodexPermissionRequest(
+                    message: message, sessionId: sessionId,
+                    clientPID: clientPID, clientID: clientID,
+                    respond: respond
+                )
             default:
                 handleGenericPermissionRequest(
                     message: message, sessionId: sessionId,
@@ -63,6 +71,11 @@ extension BridgeServer: IPCServerDelegate {
             )
         case .qoderWork:
             handleQoderWorkStatusHook(
+                message: message, sessionId: sessionId,
+                clientPID: clientPID, respond: respond
+            )
+        case .codex:
+            handleCodexStatusHook(
                 message: message, sessionId: sessionId,
                 clientPID: clientPID, respond: respond
             )

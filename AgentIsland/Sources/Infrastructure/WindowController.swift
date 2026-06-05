@@ -9,6 +9,7 @@ final class WindowController: NSObject {
     private let settingsStore: SettingsStore
     private let frontmostAppMonitor: FrontmostAppMonitor
     private let windowActivator: WindowActivator
+    private let trialManager: TrialManager
     private let confirmationQueue = ConfirmationQueue()
     private var hostingView: NSHostingView<AnyView>?
     private var barHostingView: NSHostingView<AnyView>?
@@ -16,7 +17,7 @@ final class WindowController: NSObject {
     private var displayChangeObserver: NSObjectProtocol?
     private var spaceChangeObserver: NSObjectProtocol?
     private var globalClickMonitor: Any?
-    private lazy var settingsWindowController = SettingsWindowController(settingsStore: settingsStore)
+    private lazy var settingsWindowController = SettingsWindowController(settingsStore: settingsStore, trialManager: trialManager)
 
     private let barHeight: CGFloat = 32
     private let hitAreaTopPadding: CGFloat = 10
@@ -26,11 +27,12 @@ final class WindowController: NSObject {
     private var collapseAnimation: NSAnimationContext?
     private var isAnimatingCollapse = false
 
-    init(sessionManager: SessionManager, settingsStore: SettingsStore, frontmostAppMonitor: FrontmostAppMonitor, windowActivator: WindowActivator) {
+    init(sessionManager: SessionManager, settingsStore: SettingsStore, frontmostAppMonitor: FrontmostAppMonitor, windowActivator: WindowActivator, trialManager: TrialManager) {
         self.sessionManager = sessionManager
         self.settingsStore = settingsStore
         self.frontmostAppMonitor = frontmostAppMonitor
         self.windowActivator = windowActivator
+        self.trialManager = trialManager
         self.panelState = PanelState(settingsStore: settingsStore)
         super.init()
         self.panelState.onExpandChange = { [weak self] in
@@ -50,7 +52,8 @@ final class WindowController: NSObject {
         let rootView = NotchRootView(
             panelState: panelState, sessionManager: sessionManager,
             confirmationQueue: confirmationQueue,
-            frontmostAppMonitor: frontmostAppMonitor, windowActivator: windowActivator
+            frontmostAppMonitor: frontmostAppMonitor, windowActivator: windowActivator,
+            trialManager: trialManager
         )
         let hosting = NSHostingView(rootView: AnyView(rootView))
         hosting.frame = NSRect(x: 0, y: 0, width: barWidth, height: panelHeight)

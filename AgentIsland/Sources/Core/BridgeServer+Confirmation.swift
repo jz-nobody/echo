@@ -16,16 +16,48 @@ extension BridgeServer {
 
         let confId = "\(sessionId)-\(toolName)-\(Int(Date().timeIntervalSince1970 * 1000))"
 
-        if toolName == "AskUserQuestion", let choiceDetails = parseAskUserQuestion(toolInput) {
-            let confirmation = PendingConfirmation(
-                id: confId, type: .choice, title: choiceDetails.question,
-                details: .choice(choiceDetails), timestamp: Date()
-            )
-            storeConfirmation(confirmation, sessionId: sessionId, clientID: clientID, respond: respond)
-            questionInputs[confId] = toolInput
-            applyEvent(.permissionRequest, sessionId: sessionId)
-            NotificationCenter.default.post(name: Self.confirmationReceivedNotification, object: nil)
-            return
+        if toolName == "AskUserQuestion" {
+            let allQuestions = parseAllAskUserQuestions(toolInput)
+            if !allQuestions.isEmpty {
+                if allQuestions.count == 1 {
+                    let confirmation = PendingConfirmation(
+                        id: confId, type: .choice, title: allQuestions[0].question,
+                        details: .choice(allQuestions[0]), timestamp: Date()
+                    )
+                    storeConfirmation(confirmation, sessionId: sessionId, clientID: clientID, respond: respond)
+                    questionInputs[confId] = toolInput
+                } else {
+                    let ts = Int(Date().timeIntervalSince1970 * 1000)
+                    let groupId = "\(sessionId)-group-\(ts)"
+                    var confIds: [String] = []
+
+                    for (index, q) in allQuestions.enumerated() {
+                        let qConfId = "\(sessionId)-\(toolName)-\(ts)-\(index)"
+                        var details = q
+                        details.questionIndex = index
+                        details.totalQuestions = allQuestions.count
+                        let confirmation = PendingConfirmation(
+                            id: qConfId, type: .choice, title: details.question,
+                            details: .choice(details), timestamp: Date().addingTimeInterval(Double(index) * 0.001)
+                        )
+                        pendingConfirmations[qConfId] = confirmation
+                        confirmationToSession[qConfId] = sessionId
+                        confirmationToGroup[qConfId] = groupId
+                        confIds.append(qConfId)
+                    }
+                    clientToConfirmation[clientID] = confIds[0]
+                    questionGroups[groupId] = QuestionGroup(
+                        confirmationIds: confIds, sessionId: sessionId,
+                        clientID: clientID, respond: respond,
+                        answers: [:], originalInput: toolInput,
+                        totalCount: allQuestions.count
+                    )
+                }
+
+                applyEvent(.permissionRequest, sessionId: sessionId)
+                NotificationCenter.default.post(name: Self.confirmationReceivedNotification, object: nil)
+                return
+            }
         }
 
         let operation = summarizeToolInput(name: toolName, input: toolInput)
@@ -61,6 +93,11 @@ extension BridgeServer {
                 if case .deny = response { isDeny = true } else { isDeny = false }
                 applyEvent(isDeny ? .permissionDenied : .permissionApproved, sessionId: sessionId)
             }
+            return
+        }
+
+        if let groupId = confirmationToGroup[confirmationId] {
+            respondToGroupQuestion(confirmationId: confirmationId, groupId: groupId, confirmation: confirmation, sessionId: sessionId, response: response)
             return
         }
 
@@ -109,10 +146,20 @@ extension BridgeServer {
         let confsForSession = confirmationToSession.filter { $0.value == sessionId }.map(\.key)
         guard !confsForSession.isEmpty else { return }
 
+        var cleanedGroups: Set<String> = []
         for confId in confsForSession {
-            responseCallbacks[confId]?(HookResponse(decision: "ask", reason: "Handled outside Agent Island"))
-            cleanupConfirmation(confId)
+            if let groupId = confirmationToGroup[confId], !cleanedGroups.contains(groupId) {
+                if let group = questionGroups[groupId] {
+                    group.respond(HookResponse(decision: "ask", reason: "Handled outside Agent Island"))
+                }
+                cleanupGroup(groupId)
+                cleanedGroups.insert(groupId)
+            } else if confirmationToGroup[confId] == nil {
+                responseCallbacks[confId]?(HookResponse(decision: "ask", reason: "Handled outside Agent Island"))
+                cleanupConfirmation(confId)
+            }
         }
+        applyEvent(.permissionApproved, sessionId: sessionId)
         NSLog("[BridgeServer] Cleared stale confirmations for \(sessionId.prefix(12))")
     }
 
@@ -120,10 +167,14 @@ extension BridgeServer {
         guard let confId = clientToConfirmation.removeValue(forKey: clientID) else { return }
         guard let sessionId = confirmationToSession[confId] else { return }
 
-        responseCallbacks.removeValue(forKey: confId)
-        questionInputs.removeValue(forKey: confId)
-        pendingConfirmations.removeValue(forKey: confId)
-        confirmationToSession.removeValue(forKey: confId)
+        if let groupId = confirmationToGroup[confId] {
+            cleanupGroup(groupId)
+        } else {
+            responseCallbacks.removeValue(forKey: confId)
+            questionInputs.removeValue(forKey: confId)
+            pendingConfirmations.removeValue(forKey: confId)
+            confirmationToSession.removeValue(forKey: confId)
+        }
 
         let hasRemainingConfs = confirmationToSession.values.contains(sessionId)
         if !hasRemainingConfs {
@@ -134,13 +185,26 @@ extension BridgeServer {
 
     func cleanupStaleConfirmations() {
         let now = Date()
+        var cleanedGroups: Set<String> = []
         for (confId, conf) in pendingConfirmations {
             guard now.timeIntervalSince(conf.timestamp) > confirmationTimeout else { continue }
-            responseCallbacks[confId]?(HookResponse(decision: "ask", reason: "Timed out"))
-            let sessionId = confirmationToSession[confId]
-            cleanupConfirmation(confId)
-            if let sid = sessionId, !confirmationToSession.values.contains(sid) {
-                applyEvent(.permissionDenied, sessionId: sid)
+            if let groupId = confirmationToGroup[confId], !cleanedGroups.contains(groupId) {
+                if let group = questionGroups[groupId] {
+                    group.respond(HookResponse(decision: "ask", reason: "Timed out"))
+                }
+                let sessionId = questionGroups[groupId]?.sessionId
+                cleanupGroup(groupId)
+                cleanedGroups.insert(groupId)
+                if let sid = sessionId, !confirmationToSession.values.contains(sid) {
+                    applyEvent(.permissionDenied, sessionId: sid)
+                }
+            } else if confirmationToGroup[confId] == nil {
+                responseCallbacks[confId]?(HookResponse(decision: "ask", reason: "Timed out"))
+                let sessionId = confirmationToSession[confId]
+                cleanupConfirmation(confId)
+                if let sid = sessionId, !confirmationToSession.values.contains(sid) {
+                    applyEvent(.permissionDenied, sessionId: sid)
+                }
             }
         }
     }
@@ -157,11 +221,62 @@ extension BridgeServer {
         clientToConfirmation[clientID] = confirmation.id
     }
 
+    private func respondToGroupQuestion(
+        confirmationId: String, groupId: String,
+        confirmation: PendingConfirmation, sessionId: String,
+        response: ConfirmationResponse
+    ) {
+        guard var group = questionGroups[groupId] else { return }
+
+        let answerValue: String
+        switch response {
+        case .select(let optionId): answerValue = optionId
+        case .multiSelect(let ids): answerValue = ids.joined(separator: ", ")
+        case .freeText(let text): answerValue = text
+        default: answerValue = ""
+        }
+
+        if case .choice(let details) = confirmation.details {
+            group.answers[details.question] = answerValue
+        }
+
+        pendingConfirmations.removeValue(forKey: confirmationId)
+        confirmationToSession.removeValue(forKey: confirmationId)
+        confirmationToGroup.removeValue(forKey: confirmationId)
+
+        questionGroups[groupId] = group
+
+        if group.answers.count >= group.totalCount {
+            let hookResponse = HookResponse.question(answers: group.answers, originalInput: group.originalInput)
+            group.respond(hookResponse)
+            NSLog("[BridgeServer] Group \(groupId.prefix(20)): all \(group.totalCount) answers sent")
+            cleanupGroup(groupId)
+
+            let hasRemainingConfs = confirmationToSession.values.contains(sessionId)
+            if !hasRemainingConfs {
+                applyEvent(.permissionApproved, sessionId: sessionId)
+            }
+        } else {
+            NSLog("[BridgeServer] Group \(groupId.prefix(20)): \(group.answers.count)/\(group.totalCount) answered")
+        }
+    }
+
+    private func cleanupGroup(_ groupId: String) {
+        guard let group = questionGroups.removeValue(forKey: groupId) else { return }
+        for confId in group.confirmationIds {
+            pendingConfirmations.removeValue(forKey: confId)
+            confirmationToSession.removeValue(forKey: confId)
+            confirmationToGroup.removeValue(forKey: confId)
+        }
+        clientToConfirmation.removeValue(forKey: group.clientID)
+    }
+
     private func cleanupConfirmation(_ confId: String) {
         responseCallbacks.removeValue(forKey: confId)
         questionInputs.removeValue(forKey: confId)
         pendingConfirmations.removeValue(forKey: confId)
         confirmationToSession.removeValue(forKey: confId)
+        confirmationToGroup.removeValue(forKey: confId)
         qoderWorkChatIds.removeValue(forKey: confId)
         if let clientEntry = clientToConfirmation.first(where: { $0.value == confId }) {
             clientToConfirmation.removeValue(forKey: clientEntry.key)
@@ -239,24 +354,27 @@ extension BridgeServer {
         return name
     }
 
-    func parseAskUserQuestion(_ input: [String: AnyCodable]) -> ChoiceDetails? {
-        guard let questionsRaw = input["questions"]?.value as? [[String: Any]],
-              let first = questionsRaw.first,
-              let questionText = first["question"] as? String,
-              let optionsRaw = first["options"] as? [[String: Any]] else {
-            return nil
+    func parseAllAskUserQuestions(_ input: [String: AnyCodable]) -> [ChoiceDetails] {
+        guard let questionsRaw = input["questions"]?.value as? [[String: Any]] else {
+            return []
         }
-        let options = optionsRaw.map { opt in
-            ChoiceOption(
-                id: (opt["label"] as? String) ?? "unknown",
-                label: (opt["label"] as? String) ?? "unknown",
-                description: opt["description"] as? String
-            )
+        var results: [ChoiceDetails] = []
+        for q in questionsRaw {
+            guard let questionText = q["question"] as? String,
+                  let optionsRaw = q["options"] as? [[String: Any]] else { continue }
+            let options = optionsRaw.map { opt in
+                ChoiceOption(
+                    id: (opt["label"] as? String) ?? "unknown",
+                    label: (opt["label"] as? String) ?? "unknown",
+                    description: opt["description"] as? String
+                )
+            }
+            guard !options.isEmpty else { continue }
+            let multiSelect = q["multiSelect"] as? Bool ?? false
+            let header = q["header"] as? String
+            results.append(ChoiceDetails(question: questionText, header: header, options: options, multiSelect: multiSelect))
         }
-        guard !options.isEmpty else { return nil }
-        let multiSelect = first["multiSelect"] as? Bool ?? false
-        let header = first["header"] as? String
-        return ChoiceDetails(question: questionText, header: header, options: options, multiSelect: multiSelect)
+        return results
     }
 
     func buildDiff(from input: [String: AnyCodable]) -> [DiffLine] {

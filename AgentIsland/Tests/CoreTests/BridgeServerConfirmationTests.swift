@@ -269,8 +269,8 @@ struct BridgeServerConfirmationTests {
 
     // MARK: - waitingConfirmation Status Protection
 
-    @Test("10. waitingConfirmation status not overridden by PreToolUse")
-    func waitingConfirmationBlocksStatusOverride() async throws {
+    @Test("10. PreToolUse clears stale confirmation and updates status")
+    func preToolUseClearsStaleConfirmation() async throws {
         let server = try makeBridgeServer()
         let clientID = UUID()
         let respond = { @Sendable (_: HookResponse) in }
@@ -300,7 +300,7 @@ struct BridgeServerConfirmationTests {
         )
 
         let s2 = await server.sessions["claudeCode-s1"]
-        #expect(s2?.status == .waitingConfirmation)
+        #expect(s2?.status == .reading)
     }
 
     // MARK: - Stale Confirmation Timeout

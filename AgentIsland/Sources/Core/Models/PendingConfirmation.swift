@@ -43,10 +43,22 @@ struct ChoiceDetails: Sendable, Equatable {
     let header: String?
     let options: [ChoiceOption]
     let multiSelect: Bool
+    var questionIndex: Int?
+    var totalQuestions: Int?
 }
 
 struct ChoiceOption: Identifiable, Sendable, Equatable {
     let id: String
     let label: String
     let description: String?
+}
+
+struct QuestionGroup {
+    let confirmationIds: [String]
+    let sessionId: String
+    let clientID: UUID
+    let respond: @Sendable (HookResponse) -> Void
+    var answers: [String: String]
+    let originalInput: [String: AnyCodable]
+    let totalCount: Int
 }

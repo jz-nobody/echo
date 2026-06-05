@@ -111,7 +111,6 @@ extension BridgeServer {
             session.currentToolCall = snap.currentToolCall
 
             if let state = sessionStates[id] { session.status = state.status }
-            if hasConfirmationsFor(sessionId: id) { session.status = .waitingConfirmation }
 
             sessions[id] = session
         }
@@ -131,7 +130,6 @@ extension BridgeServer {
                 terminalInfo: baseSession.terminalInfo, currentToolCall: nil
             )
             if let state = sessionStates[id] { session.status = state.status }
-            if hasConfirmationsFor(sessionId: id) { session.status = .waitingConfirmation }
             updated[id] = session
             updatedFiles[id] = file
         }

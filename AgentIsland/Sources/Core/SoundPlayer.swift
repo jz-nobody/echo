@@ -72,13 +72,17 @@ final class SoundPlayer: SoundPlayable {
     }
 
     private static let soundsDirectory: URL? = {
+        if let bundled = Bundle.main.resourceURL?.appendingPathComponent("Sounds"),
+           FileManager.default.fileExists(atPath: bundled.path) {
+            return bundled
+        }
         let execURL = (Bundle.main.executableURL ?? URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0]))
             .resolvingSymlinksInPath()
         let projectRoot = execURL
-            .deletingLastPathComponent() // → debug/
-            .deletingLastPathComponent() // → arm64-apple-macosx/
-            .deletingLastPathComponent() // → .build/
-            .deletingLastPathComponent() // → project root
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
         return projectRoot.appendingPathComponent("Resources/Sounds")
     }()
 }

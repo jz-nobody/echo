@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsRootView: View {
     let store: SettingsStore
+    let trialManager: TrialManager
     @State private var selectedSection: SettingsSection = .general
 
     var body: some View {
@@ -31,6 +32,8 @@ struct SettingsRootView: View {
             AboutSettingsView()
         case .notification:
             NotificationSettingsView(store: store)
+        case .passport:
+            PassportSettingsView(trialManager: trialManager)
         default:
             PlaceholderSettingsView(section: section)
         }

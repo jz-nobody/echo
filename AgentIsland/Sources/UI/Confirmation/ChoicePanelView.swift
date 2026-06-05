@@ -59,6 +59,16 @@ struct ChoicePanelView: View {
                 .background(agentColor.opacity(0.12))
                 .clipShape(Capsule())
 
+            if let idx = details.questionIndex, let total = details.totalQuestions {
+                Text("\(idx + 1)/\(total)")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .foregroundStyle(DesignTokens.textSecondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Capsule())
+            }
+
             Spacer()
         }
         .padding(.horizontal, 12)
@@ -229,10 +239,16 @@ struct ChoicePanelView: View {
     // MARK: - Submit Button
 
     private var submitButton: some View {
-        Button {
+        let displayCount: Int
+        if let idx = details.questionIndex {
+            displayCount = idx + 1
+        } else {
+            displayCount = selectedIds.count
+        }
+        return Button {
             onMultiSelect(Array(selectedIds))
         } label: {
-            Text("确认 (\(selectedIds.count))")
+            Text("确认 (\(displayCount))")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(DesignTokens.confirmationAllowText)
                 .frame(maxWidth: .infinity)

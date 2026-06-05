@@ -24,6 +24,7 @@ enum DesignTokens {
     static let tagCodex = Color(nsColor: NSColor(hex: "#10A37F"))
     static let tagQoderWork = Color(nsColor: NSColor(hex: "#0A84FF"))
     static let tagGemini = Color(nsColor: NSColor(hex: "#4285F4"))
+    static let tagQoder = Color(nsColor: NSColor(hex: "#5AC8FA"))
     static let tagTerminal = Color(nsColor: NSColor(hex: "#6E6E73"))
 
     // MARK: - Text

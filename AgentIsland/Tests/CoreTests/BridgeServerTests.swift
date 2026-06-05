@@ -139,8 +139,8 @@ struct BridgeServerTests {
         #expect(s2?.currentToolCall == nil)
     }
 
-    @Test("5. Stop transitions to idle")
-    func stopTransitionsToIdle() async throws {
+    @Test("5. Claude Stop transitions to completed")
+    func stopTransitionsToCompleted() async throws {
         let server = try makeBridgeServer()
         let respond = { @Sendable (_: HookResponse) in }
         let sid = "s1"
@@ -203,7 +203,7 @@ struct BridgeServerTests {
 
         let sessions = await server.sessions
         #expect(sessions["claudeCode-shared-id"]?.status == .executing)
-        #expect(sessions["qoderWork-shared-id"]?.status == .completed)
+        #expect(sessions["qoderWork-shared-id"]?.status == .idle)
     }
 
     @Test("9. Session IDs namespaced by agent type")
@@ -389,6 +389,203 @@ struct BridgeServerTests {
         #expect(session?.title == "Fix the bug")
     }
 
+    // MARK: - QoderWork Status Isolation
+
+    @Test("QoderWork PreToolUse updates metadata without changing status")
+    func qoderWorkPreToolUseMetadataOnly() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg1 = makeHookMessage(type: "SessionStart", sessionId: "q-meta")
+        await server.handleQoderWorkStatusHook(
+            message: msg1, sessionId: "qoderWork-q-meta", clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions["qoderWork-q-meta"])?.status == .idle)
+
+        let msg2 = makeHookMessage(
+            type: "PreToolUse", sessionId: "q-meta", toolName: "Read",
+            toolInput: ["file_path": AnyCodable("/tmp/test.swift")]
+        )
+        await server.handleQoderWorkStatusHook(
+            message: msg2, sessionId: "qoderWork-q-meta", clientPID: nil, respond: respond
+        )
+        let s = await server.sessions["qoderWork-q-meta"]
+        #expect(s?.status == .idle)
+        #expect(s?.currentToolCall != nil)
+    }
+
+    @Test("QoderWork PostToolUse clears metadata without changing status")
+    func qoderWorkPostToolUseMetadataOnly() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg1 = makeHookMessage(type: "UserPromptSubmit", sessionId: "q-post")
+        await server.handleQoderWorkStatusHook(
+            message: msg1, sessionId: "qoderWork-q-post", clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions["qoderWork-q-post"])?.status == .executing)
+
+        let msg2 = makeHookMessage(
+            type: "PreToolUse", sessionId: "q-post", toolName: "Bash",
+            toolInput: ["command": AnyCodable("ls")]
+        )
+        await server.handleQoderWorkStatusHook(
+            message: msg2, sessionId: "qoderWork-q-post", clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions["qoderWork-q-post"])?.status == .executing)
+        #expect((await server.sessions["qoderWork-q-post"])?.currentToolCall != nil)
+
+        let msg3 = makeHookMessage(type: "PostToolUse", sessionId: "q-post")
+        await server.handleQoderWorkStatusHook(
+            message: msg3, sessionId: "qoderWork-q-post", clientPID: nil, respond: respond
+        )
+        let s = await server.sessions["qoderWork-q-post"]
+        #expect(s?.status == .executing)
+        #expect(s?.currentToolCall == nil)
+    }
+
+    @Test("QoderWork Stop transitions to idle, not completed")
+    func qoderWorkStopToIdle() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg1 = makeHookMessage(type: "UserPromptSubmit", sessionId: "q-stop")
+        await server.handleQoderWorkStatusHook(
+            message: msg1, sessionId: "qoderWork-q-stop", clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions["qoderWork-q-stop"])?.status == .executing)
+
+        let msg2 = makeHookMessage(type: "Stop", sessionId: "q-stop")
+        await server.handleQoderWorkStatusHook(
+            message: msg2, sessionId: "qoderWork-q-stop", clientPID: nil, respond: respond
+        )
+        let s = await server.sessions["qoderWork-q-stop"]
+        #expect(s?.status == .idle)
+    }
+
+    @Test("QoderWork background hooks don't cause status bouncing")
+    func qoderWorkNoBouncing() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg1 = makeHookMessage(type: "UserPromptSubmit", sessionId: "q-bounce")
+        await server.handleQoderWorkStatusHook(
+            message: msg1, sessionId: "qoderWork-q-bounce", clientPID: nil, respond: respond
+        )
+        let msg2 = makeHookMessage(type: "Stop", sessionId: "q-bounce")
+        await server.handleQoderWorkStatusHook(
+            message: msg2, sessionId: "qoderWork-q-bounce", clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions["qoderWork-q-bounce"])?.status == .idle)
+
+        let msg3 = makeHookMessage(
+            type: "PreToolUse", sessionId: "q-bounce", toolName: "mcp__heartbeat"
+        )
+        await server.handleQoderWorkStatusHook(
+            message: msg3, sessionId: "qoderWork-q-bounce", clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions["qoderWork-q-bounce"])?.status == .idle)
+
+        let msg4 = makeHookMessage(type: "PostToolUse", sessionId: "q-bounce")
+        await server.handleQoderWorkStatusHook(
+            message: msg4, sessionId: "qoderWork-q-bounce", clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions["qoderWork-q-bounce"])?.status == .idle)
+    }
+
+    @Test("QoderWork full turn lifecycle: executing → idle → executing → idle")
+    func qoderWorkTurnLifecycle() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+        let sid = "q-lifecycle"
+        let id = "qoderWork-\(sid)"
+
+        let prompt1 = makeHookMessage(type: "UserPromptSubmit", sessionId: sid, prompt: "Fix bug")
+        await server.handleQoderWorkStatusHook(
+            message: prompt1, sessionId: id, clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions[id])?.status == .executing)
+
+        let tool1 = makeHookMessage(type: "PreToolUse", sessionId: sid, toolName: "Read")
+        await server.handleQoderWorkStatusHook(
+            message: tool1, sessionId: id, clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions[id])?.status == .executing)
+        #expect((await server.sessions[id])?.currentToolCall != nil)
+
+        let tool1Done = makeHookMessage(type: "PostToolUse", sessionId: sid)
+        await server.handleQoderWorkStatusHook(
+            message: tool1Done, sessionId: id, clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions[id])?.status == .executing)
+
+        let stop1 = makeHookMessage(type: "Stop", sessionId: sid)
+        await server.handleQoderWorkStatusHook(
+            message: stop1, sessionId: id, clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions[id])?.status == .idle)
+
+        let prompt2 = makeHookMessage(type: "UserPromptSubmit", sessionId: sid, prompt: "Add tests")
+        await server.handleQoderWorkStatusHook(
+            message: prompt2, sessionId: id, clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions[id])?.status == .executing)
+
+        let stop2 = makeHookMessage(type: "Stop", sessionId: sid)
+        await server.handleQoderWorkStatusHook(
+            message: stop2, sessionId: id, clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions[id])?.status == .idle)
+    }
+
+    @Test("QoderWork process death requires retries before cleanup")
+    func qoderWorkProcessDeathRetry() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg = makeHookMessage(type: "UserPromptSubmit", sessionId: "q-retry")
+        await server.handleQoderWorkStatusHook(
+            message: msg, sessionId: "qoderWork-q-retry", clientPID: nil, respond: respond
+        )
+        await server.setTerminalPid(99999, for: "qoderWork-q-retry")
+
+        await server.cleanupQoderWorkDeadSessions()
+        #expect(await server.sessions["qoderWork-q-retry"] != nil)
+
+        await server.cleanupQoderWorkDeadSessions()
+        #expect(await server.sessions["qoderWork-q-retry"] != nil)
+
+        await server.cleanupQoderWorkDeadSessions()
+        #expect(await server.sessions["qoderWork-q-retry"] == nil)
+    }
+
+    @Test("QoderWork process alive resets retry counter")
+    func qoderWorkProcessAliveResetsRetry() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg = makeHookMessage(type: "UserPromptSubmit", sessionId: "q-alive")
+        await server.handleQoderWorkStatusHook(
+            message: msg, sessionId: "qoderWork-q-alive", clientPID: nil, respond: respond
+        )
+
+        await server.setTerminalPid(99999, for: "qoderWork-q-alive")
+        await server.cleanupQoderWorkDeadSessions()
+        await server.cleanupQoderWorkDeadSessions()
+        #expect(await server.sessions["qoderWork-q-alive"] != nil)
+
+        await server.setTerminalPid(ProcessInfo.processInfo.processIdentifier, for: "qoderWork-q-alive")
+        await server.cleanupQoderWorkDeadSessions()
+
+        await server.setTerminalPid(99999, for: "qoderWork-q-alive")
+        await server.cleanupQoderWorkDeadSessions()
+        await server.cleanupQoderWorkDeadSessions()
+        #expect(await server.sessions["qoderWork-q-alive"] != nil)
+
+        await server.cleanupQoderWorkDeadSessions()
+        #expect(await server.sessions["qoderWork-q-alive"] == nil)
+    }
+
     // MARK: - Dispatch Routing
 
     @Test("17. Dispatch routes by agent type correctly")
@@ -538,10 +735,50 @@ struct BridgeServerTests {
 
         #expect(captured == .empty)
     }
+
+    @Test("Alive process bypasses 48h visibility filter")
+    func aliveProcessBypassesVisibilityFilter() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg = makeHookMessage(type: "SessionStart", sessionId: "old-1")
+        await server.handleClaudeStatusHook(
+            message: msg, sessionId: "claudeCode-old-1", respond: respond
+        )
+
+        let threeDaysAgo = Date().addingTimeInterval(-259200)
+        await server.setLastActivityDate(threeDaysAgo, for: "claudeCode-old-1")
+        await server.setTerminalPid(ProcessInfo.processInfo.processIdentifier, for: "claudeCode-old-1")
+
+        let visible = await server.discoverAllSessions()
+        #expect(visible.contains { $0.id == "claudeCode-old-1" })
+    }
+
+    @Test("Dead process still filtered by 48h rule")
+    func deadProcessFilteredByTimeout() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg = makeHookMessage(type: "SessionStart", sessionId: "old-2")
+        await server.handleClaudeStatusHook(
+            message: msg, sessionId: "claudeCode-old-2", respond: respond
+        )
+
+        let threeDaysAgo = Date().addingTimeInterval(-259200)
+        await server.setLastActivityDate(threeDaysAgo, for: "claudeCode-old-2")
+        await server.setTerminalPid(99999, for: "claudeCode-old-2")
+
+        let visible = await server.discoverAllSessions()
+        #expect(!visible.contains { $0.id == "claudeCode-old-2" })
+    }
 }
 
 extension BridgeServer {
     func setLastActivityDate(_ date: Date, for sessionId: String) {
         lastActivityDates[sessionId] = date
+    }
+
+    func setTerminalPid(_ pid: Int32, for sessionId: String) {
+        sessions[sessionId]?.terminalInfo = TerminalInfo(appName: "cli", pid: pid, windowId: nil)
     }
 }

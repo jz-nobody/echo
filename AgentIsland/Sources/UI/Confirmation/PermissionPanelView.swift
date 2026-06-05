@@ -2,10 +2,15 @@ import SwiftUI
 
 struct PermissionPanelView: View {
     let details: PermissionDetails
+    let agentType: AgentType
     let onAllow: () -> Void
     let onAllowAlways: () -> Void
     let onAutoApprove: () -> Void
     let onDeny: () -> Void
+
+    private var supportsAllowAlways: Bool {
+        agentType != .codex
+    }
 
     private var displayToolName: String {
         let parts = details.operation.split(separator: ":", maxSplits: 1)
@@ -91,17 +96,19 @@ struct PermissionPanelView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("允许一次, ⌘Y")
 
-            Button(action: onAllowAlways) {
-                Text("始终允许")
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 36)
-                    .background(Color(nsColor: NSColor(hex: "#0A84FF")))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            if supportsAllowAlways {
+                Button(action: onAllowAlways) {
+                    Text("始终允许")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .background(Color(nsColor: NSColor(hex: "#0A84FF")))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("始终允许, ⌘⇧Y")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("始终允许, ⌘⇧Y")
 
             Button(action: onAutoApprove) {
                 Text("自动批准")

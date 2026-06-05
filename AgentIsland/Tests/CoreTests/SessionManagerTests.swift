@@ -43,6 +43,7 @@ struct SessionManagerTests {
         let server = try makeMockBridgeServer()
         await server.injectSession(makeSession(id: "s1", status: .executing, title: "Task A"))
         await server.injectSession(makeSession(id: "s2", status: .waitingConfirmation, title: "Task B"))
+        await server.injectConfirmation(makeConfirmation(id: "c-agg"), sessionId: "s2")
 
         let manager = SessionManager(bridgeServer: server, settingsStore: makeSettings())
         await manager.pollOnce()

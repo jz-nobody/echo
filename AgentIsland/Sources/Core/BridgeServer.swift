@@ -20,6 +20,8 @@ actor BridgeServer {
     var responseCallbacks: [String: @Sendable (HookResponse) -> Void] = [:]
     var questionInputs: [String: [String: AnyCodable]] = [:]
     var clientToConfirmation: [UUID: String] = [:]
+    var questionGroups: [String: QuestionGroup] = [:]
+    var confirmationToGroup: [String: String] = [:]
 
     // Activity
     var lastActivityDates: [String: Date] = [:]
@@ -38,6 +40,7 @@ actor BridgeServer {
     var transcriptPaths: [String: String] = [:]
     var qoderWorkChatIds: [String: String] = [:]
     var chatToWorkspace: [String: String] = [:]
+    var processDeathRetries: [String: Int] = [:]
 
     // Config
     let confirmationTimeout: TimeInterval
@@ -101,6 +104,7 @@ actor BridgeServer {
 
     func discoverAllSessions() -> [AgentSession] {
         cleanupStaleConfirmations()
+        repairOrphanedWaitingStates()
 
         for (_, config) in agentConfigs {
             if let timeout = config.idleTimeout {
@@ -112,12 +116,18 @@ actor BridgeServer {
         discoverQoderWorkSessions()
         enrichAllQoderWorkTranscripts()
         deduplicateQoderWorkByTitle()
+        discoverQoderSessions()
+        enrichQoderTranscripts()
+        discoverCodexSessions()
         refreshClaudeConversationData()
 
         let now = Date()
         return sessions.values
             .filter { !backgroundSessionIds.contains($0.id) }
             .filter { session in
+                if let pid = session.terminalInfo?.pid, isProcessAlive(pid) {
+                    return true
+                }
                 let lastActivity = lastActivityDates[session.id] ?? session.lastUpdate
                 return now.timeIntervalSince(lastActivity) < Self.sessionVisibilityTimeout
             }
@@ -185,6 +195,13 @@ actor BridgeServer {
                 "previousStatus": previousStatus,
             ]
         )
+    }
+
+    func repairOrphanedWaitingStates() {
+        for (id, state) in sessionStates where state.status == .waitingConfirmation {
+            guard !hasConfirmationsFor(sessionId: id) else { continue }
+            applyEvent(.permissionDenied, sessionId: id)
+        }
     }
 
     func removeSession(_ id: String) {

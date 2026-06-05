@@ -100,8 +100,8 @@ final class SessionManager {
         response: ConfirmationResponse
     ) async throws {
         if case .autoApprove = response {
-            try await bridgeServer.respond(confirmationId: confirmation.id, response: .allow)
             await bridgeServer.enableAutoApprove(sessionId: session.id)
+            try? await bridgeServer.respond(confirmationId: confirmation.id, response: .allow)
             soundPlayer?.play(.confirmationApproved)
             await pollOnce()
             return

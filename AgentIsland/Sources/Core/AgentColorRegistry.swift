@@ -13,6 +13,7 @@ final class AgentColorRegistry {
         case .claudeCode: "Claude"
         case .codex: "Codex"
         case .gemini: "Gemini"
+        case .qoder: "Qoder"
         case .custom(let name): name.prefix(1).uppercased() + name.dropFirst()
         }
     }
@@ -22,6 +23,7 @@ final class AgentColorRegistry {
         case .qoderWork: DesignTokens.tagQoderWork
         case .claudeCode: DesignTokens.tagClaude
         case .codex: DesignTokens.tagCodex
+        case .qoder: DesignTokens.tagQoder
         case .gemini: DesignTokens.tagGemini
         case .custom(let name): dynamicColor(for: name)
         }

@@ -27,6 +27,7 @@ struct ConfirmationPanelView: View {
         case .permission(let details):
             PermissionPanelView(
                 details: details,
+                agentType: item.session.agentType,
                 onAllow: { onRespond(item, .allow) },
                 onAllowAlways: { onRespond(item, .allowAlways(toolName: details.toolName)) },
                 onAutoApprove: { onRespond(item, .autoApprove) },
