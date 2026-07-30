@@ -25,7 +25,11 @@ Agent Island 常驻在 Mac 顶部刘海区。当你在浏览网页、写文档�
 - **智能抑制**：当你正盯着某 Agent 的终端时不弹面板
 - **点击跳转**：点会话即跳到对应 Agent 的终端窗口（Accessibility API）
 - **像素宠物动画** + **音效系统**：按状态切换的桌宠与声音提示
-- **通知过滤** + **开机自启** + **试用/激活授权**
+- **通知过滤** + **开机自启**
+
+> 完全免费，无需激活码。
+
+*English: [README.en.md](README.en.md)*
 
 ## 技术栈
 
@@ -91,7 +95,7 @@ AgentIsland/
     Infrastructure/ 窗口 / IPC / hook 安装 / Keychain / 设置
     Networking/     MCP 客户端 (JSON-RPC)
     UI/             刘海条 / 展开面板 / 确认面板 / 设置 / 动画
-  Tests/            374+ 单元与集成测试
+  Tests/            365+ 单元与集成测试
   BridgeCLI/        agent-island-bridge (hook 转发 CLI)
 scripts/build-dmg.sh
 docs/               工作流 / 编码规范 / 适配器契约 / 测试策略
