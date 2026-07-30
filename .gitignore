@@ -23,3 +23,9 @@ AgentIsland/Packages/
 *.swp
 *~
 .claude/
+
+# Build output (DMG packaging)
+/build/
+
+# Tooling caches
+.playwright-mcp/
