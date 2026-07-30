@@ -130,6 +130,7 @@ actor BridgeServer {
         let now = Date()
         return sessions.values
             .filter { !backgroundSessionIds.contains($0.id) }
+            .filter { !codexSubagentThreadIds.contains($0.id) }
             .filter { session in
                 if let pid = session.terminalInfo?.pid, isProcessAlive(pid) {
                     return true

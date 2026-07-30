@@ -1028,6 +1028,34 @@ struct BridgeServerTests {
         )
         #expect(await server.sessions["codex-sub-a"] == nil)
     }
+
+    @Test("Orphan subagent (parent not present) is NOT hidden and stays visible")
+    func codexOrphanSubagentStaysVisible() async throws {
+        let (server, dbDir) = try makeBridgeServerWithCodexDB()
+        let dbPath = dbDir + "/state_5.sqlite"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        // Subagent whose parent thread is NOT in the DB (handoff / orphan / nested
+        // under a non-shown parent). It must not be hidden.
+        try writeCodexThreads(dbPath: dbPath, rows: [
+            .init(id: "orphan-sub", source: subagentSource(parent: "absent-parent", nickname: "Handoff"),
+                  title: "Handoff work", agentPath: "/root/x", updatedMs: nowMs),
+        ])
+        await server.discoverCodexSessions()
+
+        // Not hidden (parent absent).
+        #expect(!(await server.codexSubagentThreadIds.contains("codex-orphan-sub")))
+
+        // A hook from the orphan subagent (user is driving it directly) creates a
+        // visible top-level session — it must NOT be suppressed.
+        let respond = { @Sendable (_: HookResponse) in }
+        let msg = makeHookMessage(type: "UserPromptSubmit", sessionId: "orphan-sub")
+        await server.handleCodexStatusHook(
+            message: msg, sessionId: "codex-orphan-sub", clientPID: nil, respond: respond
+        )
+        #expect(await server.sessions["codex-orphan-sub"] != nil)
+        let visible = await server.discoverAllSessions()
+        #expect(visible.contains { $0.id == "codex-orphan-sub" })
+    }
 }
 
 extension BridgeServer {

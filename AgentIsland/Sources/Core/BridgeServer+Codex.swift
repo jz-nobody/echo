@@ -223,14 +223,26 @@ extension BridgeServer {
             rows.append((childId: childId, parentThreadId: parsed.parentThreadId, nickname: nickname))
         }
 
-        // Track subagent internal ids so their hooks never create top-level sessions.
-        codexSubagentThreadIds = Set(rows.map { internalSessionId(agentType: .codex, hookSessionId: $0.childId) })
-        for id in codexSubagentThreadIds {
-            backgroundSessionIds.insert(id)
+        // Only nest+hide a subagent when its parent is a currently-present session
+        // (i.e. an active orchestration whose children are background workers).
+        // A subagent whose parent is NOT shown — an orphan, a handoff/nested thread
+        // the user is driving directly — must stay visible, never vanish. The hidden
+        // set is transient (recomputed every poll), so a thread that stops being a
+        // nested child reappears; we no longer stash ids in backgroundSessionIds
+        // (which never clears and would hide such a session forever).
+        var hidden: Set<String> = []
+        var groups: [String: [SubagentInfo]] = [:]
+        for row in rows {
+            let parentId = internalSessionId(agentType: .codex, hookSessionId: row.parentThreadId)
+            guard sessions[parentId] != nil else { continue }
+            let childId = internalSessionId(agentType: .codex, hookSessionId: row.childId)
+            hidden.insert(childId)
+            groups[parentId, default: []].append(
+                SubagentInfo(id: childId, description: row.nickname, agentType: "codex", isComplete: false)
+            )
         }
-
-        let groups = buildCodexSubagentGroups(rows: rows)
-        for (parentInternalId, subs) in groups where sessions[parentInternalId] != nil {
+        codexSubagentThreadIds = hidden
+        for (parentInternalId, subs) in groups {
             sessions[parentInternalId]?.subagents = subs.isEmpty ? nil : subs
         }
     }
