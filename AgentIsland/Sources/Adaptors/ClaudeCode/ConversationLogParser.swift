@@ -103,7 +103,11 @@ enum ConversationLogParser {
                 guard let lineData = line.data(using: .utf8),
                       let obj = try JSONSerialization.jsonObject(with: lineData) as? [String: Any],
                       obj["type"] as? String == "user" else { continue }
-                return extractText(from: obj)
+                // Return the first user entry that carries a real instruction. Skip
+                // entries that yield no text after stripping — pure IDE/system
+                // wrappers (<ide_opened_file>…), tool_result messages, or empty
+                // content — instead of bailing on the very first user line.
+                if let text = extractText(from: obj) { return text }
             } catch {
                 continue
             }

@@ -37,6 +37,64 @@ struct BridgeServerTests {
         return try BridgeServer(configs: configs)
     }
 
+    /// Builds a BridgeServer whose Codex config points at a real (empty) directory,
+    /// so `discoverCodexSessions` will read a state_5.sqlite created by the test.
+    private func makeBridgeServerWithCodexDB() throws -> (BridgeServer, String) {
+        let tmpDir = NSTemporaryDirectory() + UUID().uuidString
+        let codexDir = tmpDir + "/codex"
+        try FileManager.default.createDirectory(atPath: codexDir, withIntermediateDirectories: true)
+        let configs = [
+            AgentConfig(
+                agentType: .codex, tag: "codex", displayName: "Codex",
+                socketPath: tmpDir + "/codex.sock",
+                hookSettingsPath: codexDir + "/hooks.json",
+                hookTypes: AgentConfig.codex.hookTypes,
+                requiresExistingDir: true,
+                idleTimeout: 7200
+            ),
+        ]
+        return (try BridgeServer(configs: configs), codexDir)
+    }
+
+    struct CodexThreadRow {
+        let id: String
+        let source: String
+        let title: String
+        let agentPath: String
+        let updatedMs: Int64
+    }
+
+    private func subagentSource(parent: String, nickname: String) -> String {
+        #"{"subagent":{"thread_spawn":{"parent_thread_id":"\#(parent)","depth":1,"agent_path":"/root/x","agent_nickname":"\#(nickname)","agent_role":null}}}"#
+    }
+
+    /// Creates a minimal Codex state_5.sqlite via the sqlite3 CLI with the columns
+    /// discoverCodexSessions reads.
+    private func writeCodexThreads(dbPath: String, rows: [CodexThreadRow]) throws {
+        var sql = """
+            CREATE TABLE IF NOT EXISTS threads (
+              id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', cwd TEXT NOT NULL DEFAULT '',
+              rollout_path TEXT NOT NULL DEFAULT '', first_user_message TEXT NOT NULL DEFAULT '',
+              created_at INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0,
+              created_at_ms INTEGER, updated_at_ms INTEGER,
+              source TEXT NOT NULL DEFAULT '', agent_path TEXT, archived INTEGER NOT NULL DEFAULT 0
+            );\n
+            """
+        for r in rows {
+            let esc = { (s: String) in s.replacingOccurrences(of: "'", with: "''") }
+            sql += "INSERT INTO threads (id,title,cwd,rollout_path,first_user_message,created_at,updated_at,created_at_ms,updated_at_ms,source,agent_path,archived) VALUES ('\(esc(r.id))','\(esc(r.title))','/tmp','','',\(r.updatedMs/1000),\(r.updatedMs/1000),\(r.updatedMs),\(r.updatedMs),'\(esc(r.source))','\(esc(r.agentPath))',0);\n"
+        }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+        proc.arguments = [dbPath]
+        let pipe = Pipe()
+        proc.standardInput = pipe
+        try proc.run()
+        pipe.fileHandleForWriting.write(Data(sql.utf8))
+        pipe.fileHandleForWriting.closeFile()
+        proc.waitUntilExit()
+    }
+
     private func makeHookMessage(
         type: String, sessionId: String = "test-session-1",
         toolName: String? = nil, toolInput: [String: AnyCodable]? = nil,
@@ -863,6 +921,112 @@ struct BridgeServerTests {
 
         let visible = await server.discoverAllSessions()
         #expect(!visible.contains { $0.id == "claudeCode-old-2" })
+    }
+
+    // MARK: - Codex Subagent Nesting
+
+    @Test("parseCodexSubagentSource extracts parent + nickname from subagent JSON")
+    func parseCodexSubagentSourceExtracts() async throws {
+        let server = try makeBridgeServer()
+        let source = #"{"subagent":{"thread_spawn":{"parent_thread_id":"parent-1","depth":1,"agent_path":"/root/qa","agent_nickname":"Laplace the 2nd","agent_role":null}}}"#
+        let parsed = await server.parseCodexSubagentSource(source)
+        #expect(parsed?.parentThreadId == "parent-1")
+        #expect(parsed?.nickname == "Laplace the 2nd")
+    }
+
+    @Test("parseCodexSubagentSource returns nil for plain source")
+    func parseCodexSubagentSourcePlain() async throws {
+        let server = try makeBridgeServer()
+        #expect(await server.parseCodexSubagentSource("vscode") == nil)
+        #expect(await server.parseCodexSubagentSource("automation") == nil)
+        #expect(await server.parseCodexSubagentSource("") == nil)
+    }
+
+    @Test("buildCodexSubagentGroups groups multiple children under one parent")
+    func buildCodexSubagentGroupsGroups() async throws {
+        let server = try makeBridgeServer()
+        let rows = [
+            (childId: "c1", parentThreadId: "p1", nickname: "Laplace"),
+            (childId: "c2", parentThreadId: "p1", nickname: "Pascal"),
+            (childId: "c3", parentThreadId: "p2", nickname: "Plato"),
+        ]
+        let groups = await server.buildCodexSubagentGroups(rows: rows)
+        #expect(groups["codex-p1"]?.count == 2)
+        #expect(groups["codex-p2"]?.count == 1)
+        #expect(groups["codex-p1"]?.contains { $0.description == "Laplace" && $0.id == "codex-c1" } == true)
+        #expect(groups["codex-p1"]?.allSatisfy { $0.agentType == "codex" && !$0.isComplete } == true)
+    }
+
+    @Test("buildCodexSubagentGroups empty input yields empty groups")
+    func buildCodexSubagentGroupsEmpty() async throws {
+        let server = try makeBridgeServer()
+        let groups = await server.buildCodexSubagentGroups(rows: [])
+        #expect(groups.isEmpty)
+    }
+
+    @Test("discoverCodexSessions nests active subagents under parent, hides them from top level")
+    func codexSubagentDiscoveryNests() async throws {
+        let (server, dbDir) = try makeBridgeServerWithCodexDB()
+        let dbPath = dbDir + "/state_5.sqlite"
+
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        let staleMs = nowMs - 600_000  // 10 min ago (outside 300s window)
+        try writeCodexThreads(dbPath: dbPath, rows: [
+            // parent user thread
+            .init(id: "parent-1", source: "vscode", title: "Main task", agentPath: "", updatedMs: nowMs),
+            // active subagents of parent-1
+            .init(id: "sub-a", source: subagentSource(parent: "parent-1", nickname: "Laplace the 2nd"),
+                  title: "Main task", agentPath: "/root/qa_a", updatedMs: nowMs),
+            .init(id: "sub-b", source: subagentSource(parent: "parent-1", nickname: "Pascal the 2nd"),
+                  title: "Main task", agentPath: "/root/qa_b", updatedMs: nowMs),
+            // stale subagent (outside window) — should not appear
+            .init(id: "sub-old", source: subagentSource(parent: "parent-1", nickname: "Old One"),
+                  title: "Main task", agentPath: "/root/qa_old", updatedMs: staleMs),
+        ])
+
+        _ = FileManager.default.fileExists(atPath: dbPath)
+        await server.discoverCodexSessions()
+
+        // Parent exists as top-level session
+        let parent = await server.sessions["codex-parent-1"]
+        #expect(parent != nil)
+
+        // Subagents are NOT top-level sessions
+        #expect(await server.sessions["codex-sub-a"] == nil)
+        #expect(await server.sessions["codex-sub-b"] == nil)
+
+        // Active subagents nested under parent (stale one excluded)
+        let subs = parent?.subagents ?? []
+        #expect(subs.count == 2)
+        #expect(subs.contains { $0.description == "Laplace the 2nd" })
+        #expect(subs.contains { $0.description == "Pascal the 2nd" })
+        #expect(!subs.contains { $0.description == "Old One" })
+
+        // Subagent ids tracked as background (hidden even if a hook creates them)
+        let bg = await server.codexSubagentThreadIds
+        #expect(bg.contains("codex-sub-a"))
+        #expect(bg.contains("codex-sub-b"))
+    }
+
+    @Test("Codex subagent hook does not create a top-level session")
+    func codexSubagentHookSuppressed() async throws {
+        let (server, dbDir) = try makeBridgeServerWithCodexDB()
+        let dbPath = dbDir + "/state_5.sqlite"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try writeCodexThreads(dbPath: dbPath, rows: [
+            .init(id: "parent-1", source: "vscode", title: "Main task", agentPath: "", updatedMs: nowMs),
+            .init(id: "sub-a", source: subagentSource(parent: "parent-1", nickname: "Laplace"),
+                  title: "Main task", agentPath: "/root/qa_a", updatedMs: nowMs),
+        ])
+        await server.discoverCodexSessions()
+
+        // A late hook arrives for the subagent thread — must be suppressed.
+        let respond = { @Sendable (_: HookResponse) in }
+        let msg = makeHookMessage(type: "UserPromptSubmit", sessionId: "sub-a")
+        await server.handleCodexStatusHook(
+            message: msg, sessionId: "codex-sub-a", clientPID: nil, respond: respond
+        )
+        #expect(await server.sessions["codex-sub-a"] == nil)
     }
 }
 

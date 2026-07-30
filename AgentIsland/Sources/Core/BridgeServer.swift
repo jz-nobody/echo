@@ -5,6 +5,7 @@ actor BridgeServer {
     static let confirmationReceivedNotification = Notification.Name("AgentIsland.confirmationReceived")
     static let statusChangedNotification = Notification.Name("AgentIsland.statusChanged")
     static let sessionVisibilityTimeout: TimeInterval = 172800
+    static let codexActiveSubagentWindow: TimeInterval = 300
 
     // Agent registry
     let agentConfigs: [String: AgentConfig]
@@ -26,6 +27,9 @@ actor BridgeServer {
     // Activity
     var lastActivityDates: [String: Date] = [:]
     var agentProcessPIDs: [String: pid_t] = [:]
+
+    // Codex — internal ids of subagent threads (nested under parent, hidden from top level)
+    var codexSubagentThreadIds: Set<String> = []
 
     // Claude-specific
     var sessionWatcher: SessionFileWatcher?
@@ -223,6 +227,7 @@ actor BridgeServer {
         sessionStates.removeValue(forKey: id)
         lastActivityDates.removeValue(forKey: id)
         agentProcessPIDs.removeValue(forKey: id)
+        codexSubagentThreadIds.remove(id)
 
         let confsForSession = confirmationToSession.filter { $0.value == id }.map(\.key)
         for confId in confsForSession {

@@ -165,6 +165,39 @@ struct ConversationLogParserTests {
         #expect(snap.lastAssistantMessage == "Sure, let me start.")
     }
 
+    @Test("sessionDescription skips pure IDE-wrapper first user entry")
+    func snapshotDescriptionSkipsWrapperOnlyEntry() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"<ide_opened_file>The user opened /tmp/foo.swift</ide_opened_file>"}]}}"#,
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Fix the login bug"}]}}"#
+        ])
+        let snap = ConversationLogParser.snapshot(atPath: path)
+        #expect(snap.sessionDescription == "Fix the login bug")
+    }
+
+    @Test("sessionDescription skips tool_result first user entry")
+    func snapshotDescriptionSkipsToolResultEntry() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}"#,
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Refactor the parser"}]}}"#
+        ])
+        let snap = ConversationLogParser.snapshot(atPath: path)
+        #expect(snap.sessionDescription == "Refactor the parser")
+    }
+
+    @Test("sessionDescription keeps first real instruction when combined with IDE wrapper")
+    func snapshotDescriptionStripsInlineWrapper() throws {
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"<ide_opened_file>The user opened CLAUDE.md</ide_opened_file>你现在用的什么模型"}]}}"#,
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"继续开发本项目"}]}}"#
+        ])
+        let snap = ConversationLogParser.snapshot(atPath: path)
+        // First user-sent instruction wins (topic is stable); latest activity is
+        // surfaced separately via lastUserPrompt.
+        #expect(snap.sessionDescription == "你现在用的什么模型")
+        #expect(snap.lastUserPrompt == "继续开发本项目")
+    }
+
     @Test("snapshot extracts todos from last TodoWrite call")
     func snapshotTodos() throws {
         let path = try writeTempJSONL([

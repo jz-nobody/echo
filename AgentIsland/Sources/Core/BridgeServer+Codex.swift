@@ -113,11 +113,14 @@ extension BridgeServer {
         guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return }
         defer { sqlite3_close(db) }
 
+        // Exclude subagent threads: they are nested under their parent (see
+        // discoverCodexSubagents) rather than shown as top-level sessions. This
+        // also keeps LIMIT 50 from being consumed by 100+ subagent rows.
         let query = """
             SELECT id, title, cwd, rollout_path, first_user_message,
                    created_at, updated_at, created_at_ms, updated_at_ms
             FROM threads
-            WHERE archived = 0
+            WHERE archived = 0 AND source NOT LIKE '{"subagent"%'
             ORDER BY COALESCE(updated_at_ms, updated_at * 1000) DESC
             LIMIT 50
             """
@@ -183,11 +186,104 @@ extension BridgeServer {
             )
             lastActivityDates[internalId] = updatedDate
         }
+
+        discoverCodexSubagents(db: db, now: now)
+    }
+
+    /// Reads recently-active subagent threads and nests them under their parent
+    /// session's `subagents` list instead of surfacing them as top-level sessions.
+    private func discoverCodexSubagents(db: OpaquePointer?, now: Date) {
+        let cutoffMs = Int64((now.timeIntervalSince1970 - Self.codexActiveSubagentWindow) * 1000)
+        let query = """
+            SELECT id, source, title, agent_path, updated_at_ms, updated_at
+            FROM threads
+            WHERE archived = 0 AND source LIKE '{"subagent"%'
+              AND COALESCE(updated_at_ms, updated_at * 1000) > ?
+            ORDER BY COALESCE(updated_at_ms, updated_at * 1000) DESC
+            LIMIT 200
+            """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, query, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_int64(stmt, 1, cutoffMs)
+
+        var rows: [(childId: String, parentThreadId: String, nickname: String)] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard let idPtr = sqlite3_column_text(stmt, 0) else { continue }
+            let childId = String(cString: idPtr)
+            let sourceStr = sqlite3_column_text(stmt, 1).map(String.init(cString:)) ?? ""
+            let titleStr = sqlite3_column_text(stmt, 2).map(String.init(cString:)) ?? ""
+            let agentPath = sqlite3_column_text(stmt, 3).map(String.init(cString:)) ?? ""
+
+            guard let parsed = parseCodexSubagentSource(sourceStr) else { continue }
+            let nickname = codexSubagentLabel(
+                nickname: parsed.nickname, title: titleStr, agentPath: agentPath
+            )
+            rows.append((childId: childId, parentThreadId: parsed.parentThreadId, nickname: nickname))
+        }
+
+        // Track subagent internal ids so their hooks never create top-level sessions.
+        codexSubagentThreadIds = Set(rows.map { internalSessionId(agentType: .codex, hookSessionId: $0.childId) })
+        for id in codexSubagentThreadIds {
+            backgroundSessionIds.insert(id)
+        }
+
+        let groups = buildCodexSubagentGroups(rows: rows)
+        for (parentInternalId, subs) in groups where sessions[parentInternalId] != nil {
+            sessions[parentInternalId]?.subagents = subs.isEmpty ? nil : subs
+        }
+    }
+
+    /// Groups parsed subagent rows by parent internal session id. Pure function — no
+    /// SQLite / actor state access, so it is directly unit-testable.
+    func buildCodexSubagentGroups(
+        rows: [(childId: String, parentThreadId: String, nickname: String)]
+    ) -> [String: [SubagentInfo]] {
+        var groups: [String: [SubagentInfo]] = [:]
+        for row in rows {
+            let parentInternalId = internalSessionId(agentType: .codex, hookSessionId: row.parentThreadId)
+            let childInternalId = internalSessionId(agentType: .codex, hookSessionId: row.childId)
+            let info = SubagentInfo(
+                id: childInternalId, description: row.nickname,
+                agentType: "codex", isComplete: false
+            )
+            groups[parentInternalId, default: []].append(info)
+        }
+        return groups
+    }
+
+    /// Parses a Codex `threads.source` value. Returns nil for non-subagent sources
+    /// (plain strings like "vscode"/"automation").
+    func parseCodexSubagentSource(_ source: String) -> (parentThreadId: String, nickname: String?)? {
+        guard source.hasPrefix("{"), let data = source.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let subagent = obj["subagent"] as? [String: Any],
+              let spawn = subagent["thread_spawn"] as? [String: Any],
+              let parent = spawn["parent_thread_id"] as? String, !parent.isEmpty else {
+            return nil
+        }
+        let nickname = spawn["agent_nickname"] as? String
+        return (parentThreadId: parent, nickname: nickname)
+    }
+
+    private func codexSubagentLabel(nickname: String?, title: String, agentPath: String) -> String {
+        if let nickname, !nickname.isEmpty { return nickname }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTitle.isEmpty && trimmedTitle != "New Session" {
+            return truncateTitle(trimmedTitle)
+        }
+        if !agentPath.isEmpty {
+            let last = (agentPath as NSString).lastPathComponent
+            if !last.isEmpty { return last }
+        }
+        return "Subagent"
     }
 
     // MARK: - Private
 
     private func ensureCodexSession(sessionId: String, cwd: String?) {
+        guard !codexSubagentThreadIds.contains(sessionId) else { return }
         let title = deriveCodexTitle(from: cwd)
         ensureSessionExists(id: sessionId, agentType: .codex, title: title, cwd: cwd)
     }
