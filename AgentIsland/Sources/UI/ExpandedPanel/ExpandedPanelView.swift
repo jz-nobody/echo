@@ -108,15 +108,18 @@ struct ExpandedPanelView: View {
         }
     }
 
+    // "运行中" only counts sessions that are genuinely active. A finished turn
+    // rests at .completed (Claude Stop → completed) and must NOT be counted as
+    // running — it belongs with idle sessions. Matches SessionManager.activeSessionCount.
     private var activeSessions: [AgentSession] {
         sessions
-            .filter { $0.status != .idle }
+            .filter { $0.status != .idle && $0.status != .completed }
             .sorted { $0.lastUpdate > $1.lastUpdate }
     }
 
     private var idleSessions: [AgentSession] {
         sessions
-            .filter { $0.status == .idle }
+            .filter { $0.status == .idle || $0.status == .completed }
             .sorted { $0.lastUpdate > $1.lastUpdate }
     }
 
