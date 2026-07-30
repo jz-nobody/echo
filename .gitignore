@@ -29,3 +29,7 @@ AgentIsland/Packages/
 
 # Tooling caches
 .playwright-mcp/
+
+# Activation token registry (plaintext license codes — never commit)
+AgentIsland/.token-registry.csv
+*.token-registry.csv
