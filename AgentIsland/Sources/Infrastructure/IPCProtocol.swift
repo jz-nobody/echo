@@ -65,7 +65,7 @@ struct HookResponse: Sendable, Equatable {
         if allow {
             return HookResponse(decision: "allow", reason: nil)
         } else {
-            return HookResponse(decision: "deny", reason: message ?? "Denied via Agent Island")
+            return HookResponse(decision: "deny", reason: message ?? "Denied via Echo")
         }
     }
 

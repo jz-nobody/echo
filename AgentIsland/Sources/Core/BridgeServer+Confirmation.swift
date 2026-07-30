@@ -316,7 +316,7 @@ extension BridgeServer {
         case .autoApprove:
             return HookResponse(decision: "allow", reason: nil)
         case .deny:
-            return HookResponse(decision: "deny", reason: "Denied via Agent Island")
+            return HookResponse(decision: "deny", reason: "Denied via Echo")
         case .select(let optionId):
             return questionResponse(confirmationId: confirmationId, answerValue: optionId)
         case .multiSelect(let optionIds):

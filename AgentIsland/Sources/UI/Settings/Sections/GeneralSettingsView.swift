@@ -13,7 +13,7 @@ struct GeneralSettingsView: View {
                     SettingsToggleRow(
                         title: "登录时打开",
                         isOn: $store.launchAtLogin,
-                        subtitle: "系统启动时自动运行 Agent Island"
+                        subtitle: "系统启动时自动运行 Echo"
                     )
                 }
                 .padding(8)

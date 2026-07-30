@@ -7,7 +7,7 @@ struct AboutSettingsView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.blue)
 
-            Text("Agent Island")
+            Text("Echo")
                 .font(.title.bold())
 
             Text("版本 0.1.0 (MVP)")

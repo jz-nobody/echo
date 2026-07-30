@@ -9,7 +9,7 @@ struct SettingsSidebarView: View {
             Section("高级") {
                 sectionGroup(.advanced)
             }
-            Section("Agent Island") {
+            Section("Echo") {
                 sectionGroup(.app)
             }
         }

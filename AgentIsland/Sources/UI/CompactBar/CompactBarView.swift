@@ -73,7 +73,7 @@ struct CompactBarView: View {
         .accessibilityHint("Hover to expand agent panel")
     }
     private var compactBarAccessibilityLabel: String {
-        var parts: [String] = ["Agent Island"]
+        var parts: [String] = ["Echo"]
         parts.append(isOffline ? "Offline" : status.displayText)
         if confirmationCount > 0 {
             parts.append("\(confirmationCount) confirmation\(confirmationCount == 1 ? "" : "s")")
