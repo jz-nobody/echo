@@ -187,7 +187,30 @@ extension BridgeServer {
             lastActivityDates[internalId] = updatedDate
         }
 
+        enrichCodexUserPrompts()
         discoverCodexSubagents(db: db, now: now)
+    }
+
+    /// Fills in the latest user message for Codex sessions from their rollout log
+    /// (SQLite discovery only knows the first message). Hooks, when present, still
+    /// take priority — we never overwrite a non-empty prompt with an empty parse.
+    private func enrichCodexUserPrompts() {
+        for (id, session) in sessions where session.agentType == .codex {
+            guard let path = transcriptPaths[id],
+                  let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                  let size = (attrs[.size] as? NSNumber)?.uint64Value else { continue }
+            // Reuse the cached prompt unless the rollout has grown (avoids re-scanning
+            // large, unchanged transcripts every poll).
+            if let cached = codexPromptCache[id], cached.size == size {
+                sessions[id]?.lastUserPrompt = cached.prompt
+                continue
+            }
+            if let prompt = CodexRolloutParser.lastUserPrompt(atPath: path), !prompt.isEmpty {
+                let capped = String(prompt.prefix(200))
+                codexPromptCache[id] = (size, capped)
+                sessions[id]?.lastUserPrompt = capped
+            }
+        }
     }
 
     /// Reads recently-active subagent threads and nests them under their parent

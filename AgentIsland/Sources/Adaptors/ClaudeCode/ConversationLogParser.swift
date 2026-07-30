@@ -61,9 +61,17 @@ enum ConversationLogParser {
             todos = findLastTodos(fileHandle: fileHandle, fileSize: fileSize, skipTailBytes: tailReadSize)
         }
 
+        // A turn's assistant output (tool calls / results) can be larger than the
+        // tail window, pushing the user's message out of it — so deep-scan for the
+        // last real user message when the tail didn't surface one.
+        var lastUserPrompt = tailData.lastUserPrompt
+        if lastUserPrompt == nil {
+            lastUserPrompt = findLastUserPrompt(fileHandle: fileHandle, fileSize: fileSize, skipTailBytes: tailReadSize)
+        }
+
         return ConversationSnapshot(
             sessionDescription: description,
-            lastUserPrompt: tailData.lastUserPrompt,
+            lastUserPrompt: lastUserPrompt,
             lastAssistantMessage: tailData.lastAssistantMessage,
             todos: todos,
             subagents: tailData.subagents,
@@ -305,6 +313,40 @@ enum ConversationLogParser {
               let status = TodoStatus(rawValue: statusStr),
               let activeForm = dict["activeForm"] as? String else { return nil }
         return TodoItem(content: content, status: status, activeForm: activeForm)
+    }
+
+    // MARK: - Extended user-prompt scan
+
+    /// Deep backward scan for the last real user message, used when the tail window
+    /// didn't contain one (a large assistant turn pushed it out). Skips tool_result
+    /// / wrapper-only user entries (extractText returns nil for those).
+    private static func findLastUserPrompt(fileHandle: FileHandle, fileSize: UInt64, skipTailBytes: UInt64) -> String? {
+        let alreadyScanned = min(fileSize, skipTailBytes)
+        let remaining = fileSize - alreadyScanned
+        guard remaining > 0 else { return nil }
+
+        var scannedBytes: UInt64 = 0
+        while scannedBytes < min(remaining, todoScanMaxDepth) {
+            let chunkEnd = remaining - scannedBytes
+            let readSize = min(todoScanChunkSize, chunkEnd)
+            let offset = chunkEnd - readSize
+
+            fileHandle.seek(toFileOffset: offset)
+            let data = fileHandle.readData(ofLength: Int(readSize))
+            guard let text = String(data: data, encoding: .utf8) else { break }
+
+            let lines = text.components(separatedBy: "\n")
+            for line in lines.reversed() {
+                guard !line.isEmpty, line.contains("\"user\"") else { continue }
+                guard let lineData = line.data(using: .utf8),
+                      let obj = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                      obj["type"] as? String == "user",
+                      let prompt = extractText(from: obj) else { continue }
+                return prompt
+            }
+            scannedBytes += readSize
+        }
+        return nil
     }
 
     // MARK: - Extended TodoWrite scan

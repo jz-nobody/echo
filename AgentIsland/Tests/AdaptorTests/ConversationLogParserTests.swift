@@ -165,6 +165,18 @@ struct ConversationLogParserTests {
         #expect(snap.lastAssistantMessage == "Sure, let me start.")
     }
 
+    @Test("lastUserPrompt found even when pushed past the tail window by large output")
+    func lastUserPromptDeepScan() throws {
+        // A user prompt followed by a >256KB assistant turn — beyond the tail read.
+        let bigText = String(repeating: "y", count: 400_000)
+        let path = try writeTempJSONL([
+            #"{"type":"user","message":{"role":"user","content":[{"type":"text","text":"帮我修复登录 bug"}]}}"#,
+            #"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"\#(bigText)"}]}}"#
+        ])
+        let snap = ConversationLogParser.snapshot(atPath: path)
+        #expect(snap.lastUserPrompt == "帮我修复登录 bug")
+    }
+
     @Test("sessionDescription skips pure IDE-wrapper first user entry")
     func snapshotDescriptionSkipsWrapperOnlyEntry() throws {
         let path = try writeTempJSONL([

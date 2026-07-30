@@ -32,6 +32,8 @@ actor BridgeServer {
     var codexSubagentThreadIds: Set<String> = []
     // Codex — parent ids that currently have active nested subagents (for reset each poll)
     var codexNestedParents: Set<String> = []
+    // Codex — cached latest user prompt keyed by session id, invalidated by rollout size change
+    var codexPromptCache: [String: (size: UInt64, prompt: String)] = [:]
 
     // Claude-specific
     var sessionWatcher: SessionFileWatcher?
