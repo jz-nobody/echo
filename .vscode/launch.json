@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:echo}/AgentIsland",
+            "name": "Debug agent-island-bridge (AgentIsland)",
+            "target": "agent-island-bridge",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug agent-island-bridge (AgentIsland)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:echo}/AgentIsland",
+            "name": "Release agent-island-bridge (AgentIsland)",
+            "target": "agent-island-bridge",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release agent-island-bridge (AgentIsland)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:echo}/AgentIsland",
+            "name": "Debug AgentIsland (AgentIsland)",
+            "target": "AgentIsland",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug AgentIsland (AgentIsland)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:echo}/AgentIsland",
+            "name": "Release AgentIsland (AgentIsland)",
+            "target": "AgentIsland",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release AgentIsland (AgentIsland)"
+        }
+    ]
+}
