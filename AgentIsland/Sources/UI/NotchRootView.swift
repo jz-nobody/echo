@@ -6,7 +6,6 @@ struct NotchRootView: View {
     let confirmationQueue: ConfirmationQueue
     let frontmostAppMonitor: FrontmostAppMonitor
     let windowActivator: any WindowActivating
-    let trialManager: TrialManager
 
     @State private var previousStatuses: [String: SessionStatus] = [:]
     @State private var userDismissedConfirmations = false
@@ -40,17 +39,6 @@ struct NotchRootView: View {
                         removal: .scale(scale: 0.3, anchor: .top).combined(with: .opacity)
                     )
                 )
-            } else if panelState.isExpanded, trialManager.isLocked {
-                ActivationView(trialManager: trialManager)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(DesignTokens.panelBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: DesignTokens.panelCornerRadius))
-                    .transition(
-                        .asymmetric(
-                            insertion: .scale(scale: 0.92, anchor: .top).combined(with: .opacity),
-                            removal: .scale(scale: 0.3, anchor: .top).combined(with: .opacity)
-                        )
-                    )
             } else if panelState.isExpanded {
                 ExpandedPanelView(
                     sessions: sessionManager.sessions,
@@ -142,11 +130,6 @@ struct NotchRootView: View {
         .onChange(of: frontmostAppMonitor.frontmostAppPID) {
             if !confirmationQueue.isEmpty && !panelState.isExpanded && !userDismissedConfirmations {
                 panelState.expandForConfirmation()
-            }
-        }
-        .onChange(of: trialManager.isLocked) {
-            if trialManager.isLocked {
-                panelState.expand()
             }
         }
         .onChange(of: sessionManager.sessions) {

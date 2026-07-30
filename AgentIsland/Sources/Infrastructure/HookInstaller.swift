@@ -159,9 +159,9 @@ enum HookInstaller {
         codex)      SOCK="/tmp/agent-island-codex.sock" ;;
         qoderwork)  SOCK="/tmp/agent-island-qoderwork.sock" ;;
         qoder)      SOCK="/tmp/agent-island-qoder.sock" ;;
-        *)          printf '%s\\n' '{"decision":"ask"}'; exit 0 ;;
+        *)          printf '%s\\n' '{}'; exit 0 ;;
     esac
-    FALLBACK='{"decision":"ask"}'
+    FALLBACK='{}'
     [ ! -S "$SOCK" ] && { printf '%s\\n' "$FALLBACK"; exit 0; }
     INPUT=$(cat)
     RESPONSE=$(printf '%s' "$INPUT" | python3 -c '

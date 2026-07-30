@@ -41,6 +41,22 @@ enum ProcessAncestry {
         return args.isEmpty ? nil : args
     }
 
+    static func findAgentProcessPID(from hookPID: pid_t, matching keyword: String) -> pid_t? {
+        let lowerKeyword = keyword.lowercased()
+        var current = hookPID
+        for _ in 0..<10 {
+            if let args = getProcessArgs(of: current) {
+                let joined = args.joined(separator: " ").lowercased()
+                if joined.contains(lowerKeyword) {
+                    return current
+                }
+            }
+            guard let parent = parentPID(of: current), parent > 1 else { return nil }
+            current = parent
+        }
+        return nil
+    }
+
     static func parentPID(of pid: pid_t) -> pid_t? {
         var info = kinfo_proc()
         var size = MemoryLayout<kinfo_proc>.stride

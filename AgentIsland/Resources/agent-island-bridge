@@ -2,12 +2,13 @@
 # Agent Island Bridge — Claude Code PermissionRequest hook
 # Reads hook JSON from stdin, forwards to Agent Island via Unix socket,
 # waits for decision, prints response to stdout.
-# Falls back to {"decision":"ask"} on any error (graceful degradation).
+# Falls back to {} (no opinion, proceed normally) on any error. "ask" is not a
+# valid decision for all agents (e.g. QoderWork rejects it and blocks the tool).
 
 set -e
 
 SOCK="/tmp/agent-island.sock"
-FALLBACK='{"decision":"ask"}'
+FALLBACK='{}'
 
 # Check if Agent Island is listening
 if [ ! -S "$SOCK" ]; then

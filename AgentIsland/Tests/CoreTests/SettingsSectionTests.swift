@@ -24,7 +24,7 @@ struct SettingsSectionTests {
         let app = SettingsSection.sections(in: .app)
         #expect(main.count == 6)
         #expect(advanced.count == 3)
-        #expect(app.count == 2)
+        #expect(app.count == 1)
         #expect(main.count + advanced.count + app.count == SettingsSection.allCases.count)
     }
 }

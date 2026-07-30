@@ -16,7 +16,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case shortcuts
     case ssh
     case labs
-    case passport
     case about
 
     var id: String { rawValue }
@@ -32,7 +31,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .shortcuts: "快捷键"
         case .ssh: "SSH 远程"
         case .labs: "实验室"
-        case .passport: "通行证"
         case .about: "关于"
         }
     }
@@ -48,7 +46,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .shortcuts: "keyboard.fill"
         case .ssh: "globe"
         case .labs: "exclamationmark.triangle.fill"
-        case .passport: "shield.fill"
         case .about: "info.circle.fill"
         }
     }
@@ -64,7 +61,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .shortcuts: .gray
         case .ssh: .blue
         case .labs: .orange
-        case .passport: .blue
         case .about: .blue
         }
     }
@@ -75,7 +71,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
             .main
         case .shortcuts, .ssh, .labs:
             .advanced
-        case .passport, .about:
+        case .about:
             .app
         }
     }

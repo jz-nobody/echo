@@ -17,7 +17,10 @@ if let idx = CommandLine.arguments.firstIndex(of: "--source"),
 }
 
 let socketPath = sourceSocketMap[source] ?? "/tmp/agent-island.sock"
-let fallback = #"{"decision":"ask"}"#
+// Neutral passthrough when Agent Island is unreachable: an empty object means
+// "hook has no opinion, proceed normally". "ask" is not a valid decision for
+// all agents (e.g. QoderWork rejects it and blocks the tool call).
+let fallback = "{}"
 
 let inputData = FileHandle.standardInput.readDataToEndOfFile()
 

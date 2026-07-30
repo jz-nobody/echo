@@ -105,7 +105,7 @@ struct IPCProtocolTests {
 
     @Test("encode appends newline delimiter")
     func encodeAppendsNewline() throws {
-        let resp = HookResponse(decision: "ask", reason: nil)
+        let resp = HookResponse(decision: "allow", reason: nil)
         let data = try IPCProtocol.encode(resp)
         #expect(data.last == 0x0A)
     }

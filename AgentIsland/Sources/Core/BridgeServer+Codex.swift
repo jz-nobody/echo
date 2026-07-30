@@ -193,7 +193,13 @@ extension BridgeServer {
     }
 
     private func updateCodexTerminalInfo(sessionId: String, clientPID: pid_t?) {
-        guard sessions[sessionId]?.terminalInfo == nil, let pid = clientPID else { return }
+        guard let pid = clientPID else { return }
+        if agentProcessPIDs[sessionId] == nil {
+            if let codexPID = ProcessAncestry.findAgentProcessPID(from: pid, matching: "codex") {
+                agentProcessPIDs[sessionId] = codexPID
+            }
+        }
+        guard sessions[sessionId]?.terminalInfo == nil else { return }
         guard let terminalPID = ProcessAncestry.findTerminalAppPID(of: pid) else { return }
         let app = NSWorkspace.shared.runningApplications.first {
             $0.processIdentifier == terminalPID

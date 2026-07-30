@@ -25,6 +25,7 @@ actor BridgeServer {
 
     // Activity
     var lastActivityDates: [String: Date] = [:]
+    var agentProcessPIDs: [String: pid_t] = [:]
 
     // Claude-specific
     var sessionWatcher: SessionFileWatcher?
@@ -105,6 +106,7 @@ actor BridgeServer {
     func discoverAllSessions() -> [AgentSession] {
         cleanupStaleConfirmations()
         repairOrphanedWaitingStates()
+        cleanupStaleActiveSessions()
 
         for (_, config) in agentConfigs {
             if let timeout = config.idleTimeout {
@@ -197,6 +199,18 @@ actor BridgeServer {
         )
     }
 
+    func cleanupStaleActiveSessions() {
+        for (id, session) in sessions {
+            guard session.status.isActive || session.status == .compacting else { continue }
+            guard let agentPID = agentProcessPIDs[id] else { continue }
+            guard !isProcessAlive(agentPID) else { continue }
+            NSLog("[BridgeServer] Agent process dead: %@ pid=%d status=%@",
+                  id.prefix(16).description, agentPID, session.status.displayText)
+            agentProcessPIDs.removeValue(forKey: id)
+            applyEvent(.processTerminated, sessionId: id)
+        }
+    }
+
     func repairOrphanedWaitingStates() {
         for (id, state) in sessionStates where state.status == .waitingConfirmation {
             guard !hasConfirmationsFor(sessionId: id) else { continue }
@@ -208,10 +222,11 @@ actor BridgeServer {
         sessions.removeValue(forKey: id)
         sessionStates.removeValue(forKey: id)
         lastActivityDates.removeValue(forKey: id)
+        agentProcessPIDs.removeValue(forKey: id)
 
         let confsForSession = confirmationToSession.filter { $0.value == id }.map(\.key)
         for confId in confsForSession {
-            responseCallbacks[confId]?(HookResponse(decision: "ask", reason: "Session ended"))
+            responseCallbacks[confId]?(.empty)
             responseCallbacks.removeValue(forKey: confId)
             questionInputs.removeValue(forKey: confId)
             pendingConfirmations.removeValue(forKey: confId)

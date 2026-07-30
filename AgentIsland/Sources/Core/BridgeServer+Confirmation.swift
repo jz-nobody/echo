@@ -150,12 +150,12 @@ extension BridgeServer {
         for confId in confsForSession {
             if let groupId = confirmationToGroup[confId], !cleanedGroups.contains(groupId) {
                 if let group = questionGroups[groupId] {
-                    group.respond(HookResponse(decision: "ask", reason: "Handled outside Agent Island"))
+                    group.respond(.empty)
                 }
                 cleanupGroup(groupId)
                 cleanedGroups.insert(groupId)
             } else if confirmationToGroup[confId] == nil {
-                responseCallbacks[confId]?(HookResponse(decision: "ask", reason: "Handled outside Agent Island"))
+                responseCallbacks[confId]?(.empty)
                 cleanupConfirmation(confId)
             }
         }
@@ -190,7 +190,7 @@ extension BridgeServer {
             guard now.timeIntervalSince(conf.timestamp) > confirmationTimeout else { continue }
             if let groupId = confirmationToGroup[confId], !cleanedGroups.contains(groupId) {
                 if let group = questionGroups[groupId] {
-                    group.respond(HookResponse(decision: "ask", reason: "Timed out"))
+                    group.respond(.empty)
                 }
                 let sessionId = questionGroups[groupId]?.sessionId
                 cleanupGroup(groupId)
@@ -199,7 +199,7 @@ extension BridgeServer {
                     applyEvent(.permissionDenied, sessionId: sid)
                 }
             } else if confirmationToGroup[confId] == nil {
-                responseCallbacks[confId]?(HookResponse(decision: "ask", reason: "Timed out"))
+                responseCallbacks[confId]?(.empty)
                 let sessionId = confirmationToSession[confId]
                 cleanupConfirmation(confId)
                 if let sid = sessionId, !confirmationToSession.values.contains(sid) {

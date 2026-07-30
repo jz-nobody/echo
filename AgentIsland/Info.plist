@@ -5,9 +5,9 @@
     <key>CFBundleIdentifier</key>
     <string>com.agentisland.app</string>
     <key>CFBundleName</key>
-    <string>AgentIsland</string>
+    <string>Echo</string>
     <key>CFBundleDisplayName</key>
-    <string>Agent Island</string>
+    <string>Echo</string>
     <key>CFBundleExecutable</key>
     <string>AgentIsland</string>
     <key>CFBundleVersion</key>
@@ -22,5 +22,7 @@
     <string>14.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
 </dict>
 </plist>

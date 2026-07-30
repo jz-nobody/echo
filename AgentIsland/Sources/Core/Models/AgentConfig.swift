@@ -32,7 +32,7 @@ extension AgentConfig {
             ("SubagentStop", 5),
         ],
         requiresExistingDir: false,
-        idleTimeout: nil
+        idleTimeout: nil,
     )
 
     static let codex = AgentConfig(
@@ -48,6 +48,7 @@ extension AgentConfig {
             ("UserPromptSubmit", 5),
             ("PreCompact", 5),
             ("Stop", 5),
+            ("StopFailure", 5),
             ("SessionStart", 5),
             ("SubagentStart", 5),
             ("SubagentStop", 5),
@@ -71,7 +72,7 @@ extension AgentConfig {
             ("Stop", 5),
         ],
         requiresExistingDir: true,
-        idleTimeout: nil
+        idleTimeout: nil,
     )
 
     static let qoder = AgentConfig(
@@ -92,7 +93,7 @@ extension AgentConfig {
             ("SubagentStop", 5),
         ],
         requiresExistingDir: true,
-        idleTimeout: nil
+        idleTimeout: nil,
     )
 
     static let allDefaults: [AgentConfig] = [.claude, .codex, .qoderWork, .qoder]

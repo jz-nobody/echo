@@ -4,21 +4,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR/../AgentIsland"
 BUILD_DIR="$SCRIPT_DIR/../build"
-APP_NAME="AgentIsland"
+APP_NAME="Echo"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 DMG_NAME="$APP_NAME.dmg"
 DMG_PATH="$BUILD_DIR/$DMG_NAME"
-VOLUME_NAME="Agent Island"
+VOLUME_NAME="Echo"
 
 echo "==> Cleaning previous build..."
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
-echo "==> Building release binaries..."
+echo "==> Building Universal Binary (arm64 + x86_64)..."
 cd "$PROJECT_DIR"
-swift build -c release 2>&1
+swift build -c release --arch arm64 --arch x86_64 2>&1
 
-RELEASE_DIR="$(swift build -c release --show-bin-path)"
+RELEASE_DIR="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
 
 echo "==> Assembling app bundle..."
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
@@ -30,6 +30,8 @@ cp "$RELEASE_DIR/AgentIsland" "$APP_BUNDLE/Contents/MacOS/AgentIsland"
 cp "$RELEASE_DIR/agent-island-bridge" "$APP_BUNDLE/Contents/MacOS/agent-island-bridge"
 
 cp "$PROJECT_DIR/Resources/Sounds/"*.wav "$APP_BUNDLE/Contents/Resources/Sounds/"
+
+cp "$PROJECT_DIR/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 
 echo "==> Ad-hoc code signing..."
 codesign --force --deep -s - "$APP_BUNDLE"

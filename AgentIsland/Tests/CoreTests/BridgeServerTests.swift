@@ -754,6 +754,99 @@ struct BridgeServerTests {
         #expect(visible.contains { $0.id == "claudeCode-old-1" })
     }
 
+    // MARK: - Agent Process Death Detection
+
+    @Test("Dead agent process transitions executing session to idle")
+    func deadAgentProcessTransitionsToIdle() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg = makeHookMessage(type: "UserPromptSubmit", sessionId: "dead-1")
+        await server.handleCodexStatusHook(
+            message: msg, sessionId: "codex-dead-1", clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions["codex-dead-1"])?.status == .executing)
+
+        await server.setAgentProcessPID(99999, for: "codex-dead-1")
+
+        await server.cleanupStaleActiveSessions()
+
+        let session = await server.sessions["codex-dead-1"]
+        #expect(session?.status == .idle)
+    }
+
+    @Test("Alive agent process keeps session executing")
+    func aliveAgentProcessKeepsExecuting() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg = makeHookMessage(type: "UserPromptSubmit", sessionId: "alive-1")
+        await server.handleCodexStatusHook(
+            message: msg, sessionId: "codex-alive-1", clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions["codex-alive-1"])?.status == .executing)
+
+        await server.setAgentProcessPID(ProcessInfo.processInfo.processIdentifier, for: "codex-alive-1")
+
+        await server.cleanupStaleActiveSessions()
+
+        let session = await server.sessions["codex-alive-1"]
+        #expect(session?.status == .executing)
+    }
+
+    @Test("No agent PID tracked — session not affected by cleanup")
+    func noAgentPIDNotAffected() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg = makeHookMessage(type: "UserPromptSubmit", sessionId: "no-pid")
+        await server.handleCodexStatusHook(
+            message: msg, sessionId: "codex-no-pid", clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions["codex-no-pid"])?.status == .executing)
+
+        await server.cleanupStaleActiveSessions()
+
+        let session = await server.sessions["codex-no-pid"]
+        #expect(session?.status == .executing)
+    }
+
+    @Test("Idle session not affected even with dead agent PID")
+    func idleSessionNotAffectedByDeadPID() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg = makeHookMessage(type: "SessionStart", sessionId: "idle-dead")
+        await server.handleCodexStatusHook(
+            message: msg, sessionId: "codex-idle-dead", clientPID: nil, respond: respond
+        )
+        #expect((await server.sessions["codex-idle-dead"])?.status == .idle)
+
+        await server.setAgentProcessPID(99999, for: "codex-idle-dead")
+
+        await server.cleanupStaleActiveSessions()
+
+        let session = await server.sessions["codex-idle-dead"]
+        #expect(session?.status == .idle)
+    }
+
+    @Test("Dead agent process cleans up tracked PID")
+    func deadAgentProcessCleansPID() async throws {
+        let server = try makeBridgeServer()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let msg = makeHookMessage(type: "UserPromptSubmit", sessionId: "clean-pid")
+        await server.handleCodexStatusHook(
+            message: msg, sessionId: "codex-clean-pid", clientPID: nil, respond: respond
+        )
+
+        await server.setAgentProcessPID(99999, for: "codex-clean-pid")
+        await server.cleanupStaleActiveSessions()
+
+        let pid = await server.agentProcessPIDs["codex-clean-pid"]
+        #expect(pid == nil)
+    }
+
     @Test("Dead process still filtered by 48h rule")
     func deadProcessFilteredByTimeout() async throws {
         let server = try makeBridgeServer()
@@ -780,5 +873,9 @@ extension BridgeServer {
 
     func setTerminalPid(_ pid: Int32, for sessionId: String) {
         sessions[sessionId]?.terminalInfo = TerminalInfo(appName: "cli", pid: pid, windowId: nil)
+    }
+
+    func setAgentProcessPID(_ pid: pid_t, for sessionId: String) {
+        agentProcessPIDs[sessionId] = pid
     }
 }

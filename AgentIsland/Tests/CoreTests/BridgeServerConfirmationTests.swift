@@ -240,7 +240,7 @@ struct BridgeServerConfirmationTests {
             message: promptMsg, sessionId: "claudeCode-s1", respond: respond2
         )
 
-        #expect(staleResponse?.decision == "ask")
+        #expect(staleResponse?.decision == nil)
         let confs2 = await server.pendingConfirmations
         #expect(confs2.isEmpty)
     }
@@ -323,7 +323,7 @@ struct BridgeServerConfirmationTests {
 
         await server.cleanupStaleConfirmations()
 
-        #expect(timeoutResponse?.decision == "ask")
+        #expect(timeoutResponse?.decision == nil)
         let confs2 = await server.pendingConfirmations
         #expect(confs2.isEmpty)
     }
@@ -771,10 +771,10 @@ struct BridgeServerConfirmationTests {
         #expect(s2?.status == .idle)
     }
 
-    // MARK: - removeSession Sends Ask (Not Empty)
+    // MARK: - removeSession Sends Neutral Passthrough (Not "ask")
 
-    @Test("22. removeSession sends ask decision to active callbacks")
-    func removeSessionSendsAsk() async throws {
+    @Test("22. removeSession sends neutral passthrough to active callbacks")
+    func removeSessionSendsPassthrough() async throws {
         let server = try makeBridgeServer()
         let clientID = UUID()
         var capturedResponse: HookResponse?
@@ -787,8 +787,29 @@ struct BridgeServerConfirmationTests {
 
         await server.removeSession("claudeCode-s1")
 
-        #expect(capturedResponse?.decision == "ask")
-        #expect(capturedResponse?.reason == "Session ended")
+        // Must NOT be "ask" — that value is rejected by agents like QoderWork and
+        // blocks the tool. A nil decision encodes to {} = "proceed normally".
+        #expect(capturedResponse?.decision == nil)
+    }
+
+    @Test("Abandoned confirmation encodes to empty JSON (no decision field)")
+    func abandonedConfirmationEncodesEmpty() async throws {
+        let server = try makeBridgeServer()
+        let clientID = UUID()
+        var capturedResponse: HookResponse?
+        let respond: @Sendable (HookResponse) -> Void = { capturedResponse = $0 }
+
+        let msg = makePermissionMessage()
+        await server.handlePermissionRequest(
+            message: msg, sessionId: "claudeCode-s1", clientID: clientID, respond: respond
+        )
+        await server.removeSession("claudeCode-s1")
+
+        let response = try #require(capturedResponse)
+        let data = try JSONEncoder().encode(response)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        #expect(json.isEmpty)
+        #expect(json["decision"] == nil)
     }
 }
 
