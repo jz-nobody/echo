@@ -82,7 +82,7 @@ struct BridgeServerTests {
             """
         for r in rows {
             let esc = { (s: String) in s.replacingOccurrences(of: "'", with: "''") }
-            sql += "INSERT INTO threads (id,title,cwd,rollout_path,first_user_message,created_at,updated_at,created_at_ms,updated_at_ms,source,agent_path,archived) VALUES ('\(esc(r.id))','\(esc(r.title))','/tmp','','',\(r.updatedMs/1000),\(r.updatedMs/1000),\(r.updatedMs),\(r.updatedMs),'\(esc(r.source))','\(esc(r.agentPath))',0);\n"
+            sql += "INSERT OR REPLACE INTO threads (id,title,cwd,rollout_path,first_user_message,created_at,updated_at,created_at_ms,updated_at_ms,source,agent_path,archived) VALUES ('\(esc(r.id))','\(esc(r.title))','/tmp','','',\(r.updatedMs/1000),\(r.updatedMs/1000),\(r.updatedMs),\(r.updatedMs),'\(esc(r.source))','\(esc(r.agentPath))',0);\n"
         }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
@@ -987,9 +987,10 @@ struct BridgeServerTests {
         _ = FileManager.default.fileExists(atPath: dbPath)
         await server.discoverCodexSessions()
 
-        // Parent exists as top-level session
+        // Parent exists as top-level session, shown as running while its subagents work
         let parent = await server.sessions["codex-parent-1"]
         #expect(parent != nil)
+        #expect(parent?.status == .executing)
 
         // Subagents are NOT top-level sessions
         #expect(await server.sessions["codex-sub-a"] == nil)
@@ -1055,6 +1056,36 @@ struct BridgeServerTests {
         #expect(await server.sessions["codex-orphan-sub"] != nil)
         let visible = await server.discoverAllSessions()
         #expect(visible.contains { $0.id == "codex-orphan-sub" })
+    }
+
+    @Test("Parent shown running with active subagents, resets to idle when they finish")
+    func codexParentRunningThenResets() async throws {
+        let (server, dbDir) = try makeBridgeServerWithCodexDB()
+        let dbPath = dbDir + "/state_5.sqlite"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        // Parent + one active subagent.
+        try writeCodexThreads(dbPath: dbPath, rows: [
+            .init(id: "parent-1", source: "vscode", title: "Main", agentPath: "", updatedMs: nowMs),
+            .init(id: "sub-a", source: subagentSource(parent: "parent-1", nickname: "Kepler"),
+                  title: "Main", agentPath: "/root/a", updatedMs: nowMs),
+        ])
+        await server.discoverCodexSessions()
+        #expect((await server.sessions["codex-parent-1"])?.status == .executing)
+        #expect((await server.sessions["codex-parent-1"])?.subagents?.count == 1)
+
+        // Subagent goes stale (finished) — rewrite DB with an old subagent timestamp.
+        let staleMs = nowMs - 600_000
+        try writeCodexThreads(dbPath: dbPath, rows: [
+            .init(id: "parent-1", source: "vscode", title: "Main", agentPath: "", updatedMs: nowMs),
+            .init(id: "sub-a", source: subagentSource(parent: "parent-1", nickname: "Kepler"),
+                  title: "Main", agentPath: "/root/a", updatedMs: staleMs),
+        ])
+        await server.discoverCodexSessions()
+
+        let parent = await server.sessions["codex-parent-1"]
+        #expect(parent?.status == .idle)      // reset — no active subagents
+        #expect(parent?.subagents == nil)     // stale nested list cleared
     }
 }
 

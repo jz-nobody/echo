@@ -30,6 +30,8 @@ actor BridgeServer {
 
     // Codex — internal ids of subagent threads (nested under parent, hidden from top level)
     var codexSubagentThreadIds: Set<String> = []
+    // Codex — parent ids that currently have active nested subagents (for reset each poll)
+    var codexNestedParents: Set<String> = []
 
     // Claude-specific
     var sessionWatcher: SessionFileWatcher?

@@ -242,8 +242,26 @@ extension BridgeServer {
             )
         }
         codexSubagentThreadIds = hidden
+
+        // Reset parents that no longer have active subagents: clear the stale nested
+        // list and drop the "running" elevation back to their real status.
+        for id in codexNestedParents where groups[id] == nil {
+            guard sessions[id]?.agentType == .codex else { continue }
+            sessions[id]?.subagents = nil
+            if sessions[id]?.status == .executing {
+                sessions[id]?.status = sessionStates[id]?.status ?? .idle
+            }
+        }
+        codexNestedParents = Set(groups.keys)
+
         for (parentInternalId, subs) in groups {
             sessions[parentInternalId]?.subagents = subs.isEmpty ? nil : subs
+            // A parent that delegates its work to (hidden) subagents doesn't call
+            // tools itself, so no hook marks it running and it looks idle. Reflect
+            // "running" while it has active subagents so the orchestration is visible.
+            if let st = sessions[parentInternalId]?.status, st == .idle || st == .completed {
+                sessions[parentInternalId]?.status = .executing
+            }
         }
     }
 
