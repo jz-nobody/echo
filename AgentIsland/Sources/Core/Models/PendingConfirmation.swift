@@ -43,6 +43,7 @@ struct ChoiceDetails: Sendable, Equatable {
     let header: String?
     let options: [ChoiceOption]
     let multiSelect: Bool
+    var answerKey: String? = nil
     var questionIndex: Int?
     var totalQuestions: Int?
 }
@@ -61,4 +62,5 @@ struct QuestionGroup {
     var answers: [String: String]
     let originalInput: [String: AnyCodable]
     let totalCount: Int
+    let hookEventName: String
 }

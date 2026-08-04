@@ -70,13 +70,14 @@ enum HookInstaller {
         var hooks = settings["hooks"] as? [String: Any] ?? [:]
         let command = "\(bridgeInstallPath) --source \(config.source)"
 
-        let allInstalled = config.hookTypes.allSatisfy { hookType, _ in
+        let allInstalled = config.hookTypes.allSatisfy { hookType, timeout in
             guard let entries = hooks[hookType] as? [[String: Any]] else { return false }
             return entries.contains { entry in
                 guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
                 let hasCommand = entryHooks.contains { hook in
                     guard let cmd = hook["command"] as? String else { return false }
                     return cmd.contains(hookIdentifier) && cmd.contains("--source")
+                        && hook["timeout"] as? Int == timeout
                 }
                 let hasMatcher = entry["matcher"] != nil
                 return hasCommand && hasMatcher
@@ -116,13 +117,14 @@ enum HookInstaller {
               let hooks = settings["hooks"] as? [String: Any] else {
             return false
         }
-        return config.hookTypes.allSatisfy { hookType, _ in
+        return config.hookTypes.allSatisfy { hookType, timeout in
             guard let entries = hooks[hookType] as? [[String: Any]] else { return false }
             return entries.contains { entry in
                 guard let entryHooks = entry["hooks"] as? [[String: Any]] else { return false }
                 let hasCommand = entryHooks.contains { hook in
                     guard let cmd = hook["command"] as? String else { return false }
                     return cmd.contains(hookIdentifier) && cmd.contains("--source")
+                        && hook["timeout"] as? Int == timeout
                 }
                 let hasMatcher = entry["matcher"] != nil
                 return hasCommand && hasMatcher
@@ -168,7 +170,9 @@ enum HookInstaller {
     import socket, sys, json
     data = sys.stdin.buffer.read()
     hook_type = json.loads(data).get("hook_event_name", "")
-    timeout = 86400 if hook_type == "PermissionRequest" else 45
+    parsed = json.loads(data)
+    is_question = hook_type == "PreToolUse" and parsed.get("tool_name") == "request_user_input"
+    timeout = 86400 if hook_type == "PermissionRequest" or is_question else 45
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.settimeout(timeout)
     try:

@@ -117,7 +117,7 @@ struct IPCProtocolTests {
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         #expect(json["continue"] as? Bool == true)
-        #expect(json["suppressOutput"] as? Bool == true)
+        #expect(json["suppressOutput"] == nil)
         let output = json["hookSpecificOutput"] as! [String: Any]
         #expect(output["hookEventName"] as? String == "PermissionRequest")
         let decision = output["decision"] as! [String: Any]
@@ -217,7 +217,7 @@ struct IPCProtocolTests {
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         #expect(json["continue"] as? Bool == true)
-        #expect(json["suppressOutput"] as? Bool == true)
+        #expect(json["suppressOutput"] == nil)
         let output = json["hookSpecificOutput"] as! [String: Any]
         #expect(output["hookEventName"] as? String == "PermissionRequest")
         let decision = output["decision"] as! [String: Any]
@@ -277,5 +277,31 @@ struct IPCProtocolTests {
         let answers = updatedInput["answers"] as! [String: Any]
         #expect(answers["Which features?"] as? String == "Auth, Cache")
         #expect(updatedInput["questions"] != nil)
+    }
+
+    @Test("PermissionRequest response is accepted by Codex hook parser")
+    func codexPermissionResponseOmitsUnsupportedUniversalFields() throws {
+        let response = HookResponse(decision: "allow", reason: nil)
+        let data = try JSONEncoder().encode(response)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        #expect(json["suppressOutput"] == nil)
+        let output = json["hookSpecificOutput"] as! [String: Any]
+        #expect(output["hookEventName"] as? String == "PermissionRequest")
+    }
+
+    @Test("Codex question answer encodes as a blocking PreToolUse result")
+    func codexQuestionResponseFormat() throws {
+        let response = HookResponse.codexQuestion(answers: ["delivery_mode": ["Safely"]])
+        let data = try JSONEncoder().encode(response)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let output = json["hookSpecificOutput"] as! [String: Any]
+
+        #expect(json["suppressOutput"] == nil)
+        #expect(output["hookEventName"] as? String == "PreToolUse")
+        #expect(output["permissionDecision"] as? String == "deny")
+        let reason = output["permissionDecisionReason"] as? String
+        #expect(reason?.contains("delivery_mode") == true)
+        #expect(reason?.contains("Safely") == true)
     }
 }

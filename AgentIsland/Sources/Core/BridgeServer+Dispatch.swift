@@ -77,7 +77,7 @@ extension BridgeServer: IPCServerDelegate {
         case .codex:
             handleCodexStatusHook(
                 message: message, sessionId: sessionId,
-                clientPID: clientPID, respond: respond
+                clientPID: clientPID, clientID: clientID, respond: respond
             )
         default:
             handleGenericStatusHook(

@@ -327,6 +327,37 @@ struct HookInstallerTests {
         }
     }
 
+    @Test("registerHooks upgrades an installed Codex PreToolUse timeout")
+    func upgradesCodexPreToolUseTimeout() throws {
+        let config = HookInstaller.agentConfigs[1]
+        let path = tempSettingsPath(prefix: "codex-timeout-upgrade")
+        var hooks: [String: Any] = [:]
+        for (hookType, timeout) in config.hookTypes {
+            hooks[hookType] = [[
+                "matcher": "*",
+                "hooks": [[
+                    "type": "command",
+                    "command": HookInstaller.bridgeInstallPath + " --source codex",
+                    "timeout": hookType == "PreToolUse" ? 5 : timeout,
+                ] as [String: Any]],
+            ] as [String: Any]]
+        }
+        let data = try JSONSerialization.data(withJSONObject: ["hooks": hooks])
+        try data.write(to: URL(fileURLWithPath: path))
+
+        #expect(HookInstaller.isHookInstalled(config: config, settingsPath: path) == false)
+        try HookInstaller.registerHooks(config: config, settingsPath: path)
+
+        let updated = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: URL(fileURLWithPath: path))
+        ) as! [String: Any]
+        let updatedHooks = updated["hooks"] as! [String: Any]
+        let entries = updatedHooks["PreToolUse"] as! [[String: Any]]
+        let command = (entries[0]["hooks"] as! [[String: Any]])[0]
+        let expected = config.hookTypes.first { $0.type == "PreToolUse" }!.timeout
+        #expect(command["timeout"] as? Int == expected)
+    }
+
     @Test("agent-island hook inserted at position 0")
     func hookInsertedFirst() throws {
         for config in HookInstaller.agentConfigs {

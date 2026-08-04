@@ -43,7 +43,8 @@ extension AgentConfig {
         hookSettingsPath: NSHomeDirectory() + "/.codex/hooks.json",
         hookTypes: [
             ("PermissionRequest", 86400),
-            ("PreToolUse", 5),
+            // request_user_input is intercepted here and may wait for the user.
+            ("PreToolUse", 86400),
             ("PostToolUse", 5),
             ("UserPromptSubmit", 5),
             ("PreCompact", 5),

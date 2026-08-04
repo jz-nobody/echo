@@ -18,44 +18,11 @@ extension BridgeServer {
 
         if toolName == "AskUserQuestion" {
             let allQuestions = parseAllAskUserQuestions(toolInput)
-            if !allQuestions.isEmpty {
-                if allQuestions.count == 1 {
-                    let confirmation = PendingConfirmation(
-                        id: confId, type: .choice, title: allQuestions[0].question,
-                        details: .choice(allQuestions[0]), timestamp: Date()
-                    )
-                    storeConfirmation(confirmation, sessionId: sessionId, clientID: clientID, respond: respond)
-                    questionInputs[confId] = toolInput
-                } else {
-                    let ts = Int(Date().timeIntervalSince1970 * 1000)
-                    let groupId = "\(sessionId)-group-\(ts)"
-                    var confIds: [String] = []
-
-                    for (index, q) in allQuestions.enumerated() {
-                        let qConfId = "\(sessionId)-\(toolName)-\(ts)-\(index)"
-                        var details = q
-                        details.questionIndex = index
-                        details.totalQuestions = allQuestions.count
-                        let confirmation = PendingConfirmation(
-                            id: qConfId, type: .choice, title: details.question,
-                            details: .choice(details), timestamp: Date().addingTimeInterval(Double(index) * 0.001)
-                        )
-                        pendingConfirmations[qConfId] = confirmation
-                        confirmationToSession[qConfId] = sessionId
-                        confirmationToGroup[qConfId] = groupId
-                        confIds.append(qConfId)
-                    }
-                    clientToConfirmation[clientID] = confIds[0]
-                    questionGroups[groupId] = QuestionGroup(
-                        confirmationIds: confIds, sessionId: sessionId,
-                        clientID: clientID, respond: respond,
-                        answers: [:], originalInput: toolInput,
-                        totalCount: allQuestions.count
-                    )
-                }
-
-                applyEvent(.permissionRequest, sessionId: sessionId)
-                NotificationCenter.default.post(name: Self.confirmationReceivedNotification, object: nil)
+            if enqueueChoiceQuestions(
+                allQuestions, toolName: toolName, originalInput: toolInput,
+                hookEventName: "PermissionRequest", sessionId: sessionId,
+                clientID: clientID, respond: respond
+            ) {
                 return
             }
         }
@@ -73,6 +40,73 @@ extension BridgeServer {
         storeConfirmation(confirmation, sessionId: sessionId, clientID: clientID, respond: respond)
         applyEvent(.permissionRequest, sessionId: sessionId)
         NotificationCenter.default.post(name: Self.confirmationReceivedNotification, object: nil)
+    }
+
+    @discardableResult
+    func handleCodexRequestUserInput(
+        message: HookMessage, sessionId: String, clientID: UUID,
+        respond: @escaping @Sendable (HookResponse) -> Void
+    ) -> Bool {
+        let toolInput = message.toolInput ?? [:]
+        let questions = parseCodexRequestUserInputQuestions(toolInput)
+        return enqueueChoiceQuestions(
+            questions, toolName: "request_user_input", originalInput: toolInput,
+            hookEventName: "PreToolUse", sessionId: sessionId,
+            clientID: clientID, respond: respond
+        )
+    }
+
+    private func enqueueChoiceQuestions(
+        _ questions: [ChoiceDetails], toolName: String,
+        originalInput: [String: AnyCodable], hookEventName: String,
+        sessionId: String, clientID: UUID,
+        respond: @escaping @Sendable (HookResponse) -> Void
+    ) -> Bool {
+        guard !questions.isEmpty else { return false }
+        let timestamp = Int(Date().timeIntervalSince1970 * 1000)
+
+        if questions.count == 1 {
+            let confId = "\(sessionId)-\(toolName)-\(timestamp)"
+            let confirmation = PendingConfirmation(
+                id: confId, type: .choice, title: questions[0].question,
+                details: .choice(questions[0]), timestamp: Date()
+            )
+            storeConfirmation(
+                confirmation, sessionId: sessionId, clientID: clientID,
+                hookEventName: hookEventName, respond: respond
+            )
+            questionInputs[confId] = originalInput
+        } else {
+            let groupId = "\(sessionId)-group-\(timestamp)"
+            var confIds: [String] = []
+            for (index, question) in questions.enumerated() {
+                let confId = "\(sessionId)-\(toolName)-\(timestamp)-\(index)"
+                var details = question
+                details.questionIndex = index
+                details.totalQuestions = questions.count
+                let confirmation = PendingConfirmation(
+                    id: confId, type: .choice, title: details.question,
+                    details: .choice(details),
+                    timestamp: Date().addingTimeInterval(Double(index) * 0.001)
+                )
+                pendingConfirmations[confId] = confirmation
+                confirmationToSession[confId] = sessionId
+                confirmationToGroup[confId] = groupId
+                confirmationHookEventNames[confId] = hookEventName
+                confIds.append(confId)
+            }
+            clientToConfirmation[clientID] = confIds[0]
+            questionGroups[groupId] = QuestionGroup(
+                confirmationIds: confIds, sessionId: sessionId,
+                clientID: clientID, respond: respond,
+                answers: [:], originalInput: originalInput,
+                totalCount: questions.count, hookEventName: hookEventName
+            )
+        }
+
+        applyEvent(.permissionRequest, sessionId: sessionId)
+        NotificationCenter.default.post(name: Self.confirmationReceivedNotification, object: nil)
+        return true
     }
 
     func respond(confirmationId: String, response: ConfirmationResponse) throws {
@@ -101,7 +135,10 @@ extension BridgeServer {
             return
         }
 
-        let hookResponse = buildHookResponse(for: response, confirmationId: confirmationId)
+        let hookResponse = buildHookResponse(
+            for: response, confirmation: confirmation,
+            confirmationId: confirmationId, sessionId: sessionId
+        )
 
         let delivered: Bool
         if let callback = responseCallbacks[confirmationId] {
@@ -174,6 +211,7 @@ extension BridgeServer {
             questionInputs.removeValue(forKey: confId)
             pendingConfirmations.removeValue(forKey: confId)
             confirmationToSession.removeValue(forKey: confId)
+            confirmationHookEventNames.removeValue(forKey: confId)
         }
 
         let hasRemainingConfs = confirmationToSession.values.contains(sessionId)
@@ -213,11 +251,13 @@ extension BridgeServer {
 
     private func storeConfirmation(
         _ confirmation: PendingConfirmation, sessionId: String,
-        clientID: UUID, respond: @escaping @Sendable (HookResponse) -> Void
+        clientID: UUID, hookEventName: String = "PermissionRequest",
+        respond: @escaping @Sendable (HookResponse) -> Void
     ) {
         pendingConfirmations[confirmation.id] = confirmation
         confirmationToSession[confirmation.id] = sessionId
         responseCallbacks[confirmation.id] = respond
+        confirmationHookEventNames[confirmation.id] = hookEventName
         clientToConfirmation[clientID] = confirmation.id
     }
 
@@ -237,7 +277,7 @@ extension BridgeServer {
         }
 
         if case .choice(let details) = confirmation.details {
-            group.answers[details.question] = answerValue
+            group.answers[details.answerKey ?? details.question] = answerValue
         }
 
         pendingConfirmations.removeValue(forKey: confirmationId)
@@ -247,7 +287,16 @@ extension BridgeServer {
         questionGroups[groupId] = group
 
         if group.answers.count >= group.totalCount {
-            let hookResponse = HookResponse.question(answers: group.answers, originalInput: group.originalInput)
+            let hookResponse: HookResponse
+            if group.hookEventName == "PreToolUse" {
+                hookResponse = .codexQuestion(
+                    answers: group.answers.mapValues { [$0] }
+                )
+            } else {
+                hookResponse = .question(
+                    answers: group.answers, originalInput: group.originalInput
+                )
+            }
             group.respond(hookResponse)
             NSLog("[BridgeServer] Group \(groupId.prefix(20)): all \(group.totalCount) answers sent")
             cleanupGroup(groupId)
@@ -267,6 +316,7 @@ extension BridgeServer {
             pendingConfirmations.removeValue(forKey: confId)
             confirmationToSession.removeValue(forKey: confId)
             confirmationToGroup.removeValue(forKey: confId)
+            confirmationHookEventNames.removeValue(forKey: confId)
         }
         clientToConfirmation.removeValue(forKey: group.clientID)
     }
@@ -277,6 +327,7 @@ extension BridgeServer {
         pendingConfirmations.removeValue(forKey: confId)
         confirmationToSession.removeValue(forKey: confId)
         confirmationToGroup.removeValue(forKey: confId)
+        confirmationHookEventNames.removeValue(forKey: confId)
         qoderWorkChatIds.removeValue(forKey: confId)
         if let clientEntry = clientToConfirmation.first(where: { $0.value == confId }) {
             clientToConfirmation.removeValue(forKey: clientEntry.key)
@@ -307,12 +358,47 @@ extension BridgeServer {
         }
     }
 
-    private func buildHookResponse(for response: ConfirmationResponse, confirmationId: String) -> HookResponse {
+    private func buildHookResponse(
+        for response: ConfirmationResponse, confirmation: PendingConfirmation,
+        confirmationId: String, sessionId: String
+    ) -> HookResponse {
+        if confirmationHookEventNames[confirmationId] == "PreToolUse" {
+            let answerKey: String
+            if case .choice(let details) = confirmation.details {
+                answerKey = details.answerKey ?? details.question
+            } else {
+                answerKey = confirmation.title
+            }
+            switch response {
+            case .select(let optionId):
+                return .codexQuestion(answers: [answerKey: [optionId]])
+            case .multiSelect(let optionIds):
+                return .codexQuestion(answers: [answerKey: optionIds])
+            case .freeText(let text):
+                return .codexQuestion(answers: [answerKey: [text]])
+            case .deny:
+                return HookResponse(
+                    decision: "deny", reason: "User cancelled the question in Echo",
+                    hookEventName: "PreToolUse"
+                )
+            default:
+                return HookResponse(
+                    decision: "deny", reason: "Echo did not receive a valid question answer",
+                    hookEventName: "PreToolUse"
+                )
+            }
+        }
+
         switch response {
         case .allow:
             return HookResponse(decision: "allow", reason: nil)
         case .allowAlways(let toolName):
-            return .allowAlways(toolName: toolName)
+            // Codex PermissionRequest rejects updatedPermissions. A plain allow
+            // is still a valid decision; Echo's separate auto-approve action
+            // owns session-wide approval when the user explicitly chooses it.
+            return sessionId.hasPrefix("codex-")
+                ? HookResponse(decision: "allow", reason: nil)
+                : .allowAlways(toolName: toolName)
         case .autoApprove:
             return HookResponse(decision: "allow", reason: nil)
         case .deny:
@@ -375,6 +461,35 @@ extension BridgeServer {
             results.append(ChoiceDetails(question: questionText, header: header, options: options, multiSelect: multiSelect))
         }
         return results
+    }
+
+    func parseCodexRequestUserInputQuestions(
+        _ input: [String: AnyCodable]
+    ) -> [ChoiceDetails] {
+        guard let questionsRaw = input["questions"]?.value as? [[String: Any]] else {
+            return []
+        }
+        return questionsRaw.compactMap { question in
+            guard let id = question["id"] as? String, !id.isEmpty,
+                  let text = question["question"] as? String, !text.isEmpty,
+                  let optionsRaw = question["options"] as? [[String: Any]] else {
+                return nil
+            }
+            let options = optionsRaw.compactMap { option -> ChoiceOption? in
+                guard let label = option["label"] as? String, !label.isEmpty else {
+                    return nil
+                }
+                return ChoiceOption(
+                    id: label, label: label,
+                    description: option["description"] as? String
+                )
+            }
+            guard !options.isEmpty else { return nil }
+            return ChoiceDetails(
+                question: text, header: question["header"] as? String,
+                options: options, multiSelect: false, answerKey: id
+            )
+        }
     }
 
     func buildDiff(from input: [String: AnyCodable]) -> [DiffLine] {

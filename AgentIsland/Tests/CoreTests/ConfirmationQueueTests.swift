@@ -193,4 +193,31 @@ struct ConfirmationQueueTests {
             Issue.record("Expected .choice details")
         }
     }
+
+    @Test("confirmation from a hidden Codex subagent is attached to its visible parent")
+    @MainActor
+    func hiddenCodexSubagentConfirmationUsesParent() {
+        let queue = ConfirmationQueue()
+        var parent = AgentSession(
+            id: "codex-parent", agentType: .codex, title: "Parent",
+            status: .executing, startTime: Date(), lastUpdate: Date(),
+            terminalInfo: nil, currentToolCall: nil
+        )
+        parent.subagents = [
+            SubagentInfo(
+                id: "codex-child", description: "Worker",
+                agentType: "codex", isComplete: false
+            )
+        ]
+        let confirmation = makeConfirmation(id: "child-bash")
+
+        queue.update(
+            from: ["codex-child": [confirmation]],
+            sessions: [parent]
+        )
+
+        #expect(queue.count == 1)
+        #expect(queue.currentItem?.confirmation.id == "child-bash")
+        #expect(queue.currentItem?.session.id == "codex-parent")
+    }
 }

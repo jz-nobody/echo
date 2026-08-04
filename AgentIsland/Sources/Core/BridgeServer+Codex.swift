@@ -31,6 +31,7 @@ extension BridgeServer {
     func handleCodexStatusHook(
         message: HookMessage, sessionId: String,
         clientPID: pid_t?,
+        clientID: UUID = UUID(),
         respond: @escaping @Sendable (HookResponse) -> Void
     ) {
         ensureCodexSession(sessionId: sessionId, cwd: message.cwd)
@@ -56,6 +57,15 @@ extension BridgeServer {
         case "PreToolUse":
             let toolName = message.toolName ?? "Unknown"
             let toolInput = message.toolInput ?? [:]
+            if toolName == "request_user_input" {
+                clearStaleInteraction(for: sessionId)
+                if handleCodexRequestUserInput(
+                    message: message, sessionId: sessionId,
+                    clientID: clientID, respond: respond
+                ) {
+                    return
+                }
+            }
             sessions[sessionId]?.currentToolCall = summarizeToolInput(name: toolName, input: toolInput)
             if toolName == "TodoWrite" {
                 sessions[sessionId]?.todos = parseTodos(from: toolInput)

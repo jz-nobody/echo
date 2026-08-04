@@ -24,7 +24,10 @@ final class ConfirmationQueue {
 
         var newItems: [QueuedConfirmation] = []
         for (sessionId, confs) in confirmations {
-            guard let session = sessionMap[sessionId] else { continue }
+            let session = sessionMap[sessionId] ?? sessions.first { session in
+                session.subagents?.contains(where: { $0.id == sessionId }) == true
+            }
+            guard let session else { continue }
             for conf in confs {
                 newItems.append(QueuedConfirmation(confirmation: conf, session: session))
             }

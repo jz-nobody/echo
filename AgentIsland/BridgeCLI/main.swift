@@ -27,7 +27,8 @@ let inputData = FileHandle.standardInput.readDataToEndOfFile()
 var recvTimeout: Int = 45
 if let json = try? JSONSerialization.jsonObject(with: inputData) as? [String: Any],
    let hookType = json["hook_event_name"] as? String,
-   hookType == "PermissionRequest" {
+   hookType == "PermissionRequest" ||
+       (hookType == "PreToolUse" && json["tool_name"] as? String == "request_user_input") {
     recvTimeout = 86400
 }
 

@@ -1087,6 +1087,84 @@ struct BridgeServerTests {
         #expect(parent?.status == .idle)      // reset — no active subagents
         #expect(parent?.subagents == nil)     // stale nested list cleared
     }
+
+    @Test("Codex request_user_input PreToolUse creates an Echo choice card and returns the answer")
+    func codexRequestUserInputCreatesChoiceCard() async throws {
+        let server = try makeBridgeServer()
+        var captured: HookResponse?
+        let respond: @Sendable (HookResponse) -> Void = { captured = $0 }
+        let message = makeHookMessage(
+            type: "PreToolUse", sessionId: "question-session",
+            toolName: "request_user_input",
+            toolInput: [
+                "questions": AnyCodable([[
+                    "id": "delivery_mode",
+                    "header": "Delivery",
+                    "question": "How should this ship?",
+                    "options": [
+                        ["label": "Safely", "description": "Use staged rollout"],
+                        ["label": "Quickly", "description": "Ship immediately"],
+                    ],
+                ]])
+            ]
+        )
+
+        await server.dispatchHook(
+            message: message, tag: "codex", clientPID: nil,
+            clientID: UUID(), respond: respond
+        )
+
+        let confirmations = await server.pendingConfirmations
+        #expect(confirmations.count == 1)
+        let confirmation = try #require(confirmations.values.first)
+        #expect(confirmation.type == .choice)
+        if case .choice(let details) = confirmation.details {
+            #expect(details.question == "How should this ship?")
+            #expect(details.header == "Delivery")
+            #expect(details.options.map(\.id) == ["Safely", "Quickly"])
+        } else {
+            Issue.record("Expected a choice confirmation")
+        }
+
+        try await server.respond(
+            confirmationId: confirmation.id,
+            response: .select(optionId: "Safely")
+        )
+        #expect(captured?.hookEventName == "PreToolUse")
+        #expect(captured?.decision == "deny")
+        #expect(captured?.reason?.contains("delivery_mode") == true)
+        #expect(captured?.reason?.contains("Safely") == true)
+    }
+
+    @Test("Codex Bash PermissionRequest dispatch creates a permission card and returns allow")
+    func codexBashPermissionDispatchCreatesCard() async throws {
+        let server = try makeBridgeServer()
+        var captured: HookResponse?
+        let respond: @Sendable (HookResponse) -> Void = { captured = $0 }
+        let message = makeHookMessage(
+            type: "PermissionRequest", sessionId: "bash-session",
+            toolName: "exec_command",
+            toolInput: ["command": AnyCodable("touch /tmp/echo-hook-test")]
+        )
+
+        await server.dispatchHook(
+            message: message, tag: "codex", clientPID: nil,
+            clientID: UUID(), respond: respond
+        )
+
+        let confirmations = await server.pendingConfirmations
+        #expect(confirmations.count == 1)
+        let confirmation = try #require(confirmations.values.first)
+        #expect(confirmation.type == .permission)
+        if case .permission(let details) = confirmation.details {
+            #expect(details.toolName == "exec_command")
+        } else {
+            Issue.record("Expected a permission confirmation")
+        }
+
+        try await server.respond(confirmationId: confirmation.id, response: .allow)
+        #expect(captured?.decision == "allow")
+    }
 }
 
 extension BridgeServer {

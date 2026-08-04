@@ -23,6 +23,7 @@ actor BridgeServer {
     var clientToConfirmation: [UUID: String] = [:]
     var questionGroups: [String: QuestionGroup] = [:]
     var confirmationToGroup: [String: String] = [:]
+    var confirmationHookEventNames: [String: String] = [:]
 
     // Activity
     var lastActivityDates: [String: Date] = [:]
@@ -241,6 +242,7 @@ actor BridgeServer {
             questionInputs.removeValue(forKey: confId)
             pendingConfirmations.removeValue(forKey: confId)
             confirmationToSession.removeValue(forKey: confId)
+            confirmationHookEventNames.removeValue(forKey: confId)
             if let clientEntry = clientToConfirmation.first(where: { $0.value == confId }) {
                 clientToConfirmation.removeValue(forKey: clientEntry.key)
             }

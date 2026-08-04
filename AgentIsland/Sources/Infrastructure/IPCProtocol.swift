@@ -47,16 +47,19 @@ struct HookResponse: Sendable, Equatable {
     let reason: String?
     let updatedInput: [String: AnyCodable]?
     let updatedPermissions: [[String: AnyCodable]]?
+    let hookEventName: String?
 
     init(
         decision: String?, reason: String?,
         updatedInput: [String: AnyCodable]? = nil,
-        updatedPermissions: [[String: AnyCodable]]? = nil
+        updatedPermissions: [[String: AnyCodable]]? = nil,
+        hookEventName: String? = nil
     ) {
         self.decision = decision
         self.reason = reason
         self.updatedInput = updatedInput
         self.updatedPermissions = updatedPermissions
+        self.hookEventName = hookEventName
     }
 
     static let empty = HookResponse(decision: nil, reason: nil)
@@ -85,6 +88,27 @@ struct HookResponse: Sendable, Equatable {
         ]
         return HookResponse(decision: "allow", reason: nil, updatedPermissions: [update])
     }
+
+    /// Codex does not expose `request_user_input` through PermissionRequest.
+    /// Echo collects the answer during PreToolUse and blocks the native tool call
+    /// with a structured result that the model can consume without asking twice.
+    static func codexQuestion(answers: [String: [String]]) -> HookResponse {
+        let payload: [String: Any] = [
+            "answers": answers.mapValues { ["answers": $0] }
+        ]
+        let json: String
+        if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+           let encoded = String(data: data, encoding: .utf8) {
+            json = encoded
+        } else {
+            json = "{}"
+        }
+        return HookResponse(
+            decision: "deny",
+            reason: "Echo collected the user's answer. Treat this as the request_user_input result and continue without asking again: \(json)",
+            hookEventName: "PreToolUse"
+        )
+    }
 }
 
 extension HookResponse: Codable {
@@ -99,25 +123,32 @@ extension HookResponse: Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         if let decision {
             try container.encode(true, forKey: .continue)
-            try container.encode(true, forKey: .suppressOutput)
-            var output: [String: Any] = ["hookEventName": "PermissionRequest"]
-            if decision == "allow" {
-                var decisionDict: [String: Any] = ["behavior": "allow"]
-                if let updatedInput {
-                    let inputData = try JSONEncoder().encode(updatedInput)
-                    let inputObj = try JSONSerialization.jsonObject(with: inputData)
-                    decisionDict["updatedInput"] = inputObj
+            let eventName = hookEventName ?? "PermissionRequest"
+            var output: [String: Any] = ["hookEventName": eventName]
+            if eventName == "PreToolUse" {
+                output["permissionDecision"] = decision
+                if let reason {
+                    output["permissionDecisionReason"] = reason
                 }
-                if let updatedPermissions {
-                    let permsData = try JSONEncoder().encode(updatedPermissions)
-                    let permsObj = try JSONSerialization.jsonObject(with: permsData)
-                    decisionDict["updatedPermissions"] = permsObj
-                }
-                output["decision"] = decisionDict
             } else {
-                var deny: [String: Any] = ["behavior": "deny"]
-                if let reason { deny["message"] = reason }
-                output["decision"] = deny
+                if decision == "allow" {
+                    var decisionDict: [String: Any] = ["behavior": "allow"]
+                    if let updatedInput {
+                        let inputData = try JSONEncoder().encode(updatedInput)
+                        let inputObj = try JSONSerialization.jsonObject(with: inputData)
+                        decisionDict["updatedInput"] = inputObj
+                    }
+                    if let updatedPermissions {
+                        let permsData = try JSONEncoder().encode(updatedPermissions)
+                        let permsObj = try JSONSerialization.jsonObject(with: permsData)
+                        decisionDict["updatedPermissions"] = permsObj
+                    }
+                    output["decision"] = decisionDict
+                } else {
+                    var deny: [String: Any] = ["behavior": "deny"]
+                    if let reason { deny["message"] = reason }
+                    output["decision"] = deny
+                }
             }
             let outputData = try JSONSerialization.data(withJSONObject: output)
             let outputJSON = try JSONDecoder().decode(AnyCodable.self, from: outputData)
@@ -132,12 +163,14 @@ extension HookResponse: Codable {
             reason = try container.decodeIfPresent(String.self, forKey: .reason)
             updatedInput = nil
             updatedPermissions = nil
+            hookEventName = nil
         } else if let output = try container.decodeIfPresent(AnyCodable.self, forKey: .hookSpecificOutput),
                   let dict = output.value as? [String: Any],
                   let decisionDict = dict["decision"] as? [String: Any],
                   let behavior = decisionDict["behavior"] as? String {
             decision = behavior
             reason = decisionDict["message"] as? String
+            hookEventName = dict["hookEventName"] as? String
             if let inputDict = decisionDict["updatedInput"] as? [String: Any] {
                 let data = try JSONSerialization.data(withJSONObject: inputDict)
                 updatedInput = try JSONDecoder().decode([String: AnyCodable].self, from: data)
@@ -150,11 +183,20 @@ extension HookResponse: Codable {
             } else {
                 updatedPermissions = nil
             }
+        } else if let output = try container.decodeIfPresent(AnyCodable.self, forKey: .hookSpecificOutput),
+                  let dict = output.value as? [String: Any],
+                  let behavior = dict["permissionDecision"] as? String {
+            decision = behavior
+            reason = dict["permissionDecisionReason"] as? String
+            updatedInput = nil
+            updatedPermissions = nil
+            hookEventName = dict["hookEventName"] as? String
         } else {
             decision = nil
             reason = nil
             updatedInput = nil
             updatedPermissions = nil
+            hookEventName = nil
         }
     }
 }
