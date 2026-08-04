@@ -46,18 +46,25 @@ Echo 常驻在 Mac 顶部刘海区。当你在浏览网页、写文档、做其�
 ## 功能
 
 - **刘海区常驻**：缩小态显示聚合状态，hover 展开完整会话列表
+
 <img width="368" height="240" alt="001" src="https://github.com/user-attachments/assets/bd9e7497-1ba8-421b-ae35-34de71909661" />
+
 - **实时状态**：多 Agent 状态聚合，按优先级汇总（等待确认 > 运行 > 完成 > 就绪）
 - **权限审批面板**：diff 预览、允许 / 拒绝、键盘快捷键、"始终允许"、自动批准
+
 <img width="368" height="240" alt="8月4日(3)" src="https://github.com/user-attachments/assets/5ec10403-cbae-48ea-8dd6-ca4ac8a0a104" />
+
 - **选择题面板**：单选 / 多选 / 自由文本输入，支持一次多问的分组应答
+
 <img width="368" height="240" alt="8月4日" src="https://github.com/user-attachments/assets/8cb111df-560e-4f0e-a18a-7c8e54618718" />
 <img width="368" height="240" alt="8月4日(1)" src="https://github.com/user-attachments/assets/ff3b8182-04d5-4d6c-bd9d-29d4e9dca551" />
+
 - **确认队列**：多个 Agent 的确认请求排队处理
 - **子任务归并**：并行子 agent 归到父任务的 subagent 列表，显示活跃subagent执行状态，并自动归纳
 - **智能抑制**：当你正盯着某 Agent 的终端时不弹面板（前台应用检测）
 - **点击跳转**：点会话即跳到对应 Agent 的终端窗口（Accessibility API）
   <img width="368" height="240" alt="8月4日(2)" src="https://github.com/user-attachments/assets/29f5a93e-6492-4aad-bdb9-a8eea50997a2" />
+  
 - **像素宠物动画**：按状态切换的桌宠（就绪 / 运行 / 压缩 / 询问）
 - **音效系统**：完成 / 询问 / 压缩完成 / 空闲提醒等事件音，可配置
 - **通知过滤**：按标题关键字过滤噪音会话
