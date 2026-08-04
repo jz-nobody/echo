@@ -56,13 +56,14 @@ Echo 常驻在 Mac 顶部刘海区。当你在浏览网页、写文档、做其�
 
 - **选择题面板**：单选 / 多选 / 自由文本输入，支持一次多问的分组应答
 
-<img width="368" height="240" alt="8月4日" src="https://github.com/user-attachments/assets/8cb111df-560e-4f0e-a18a-7c8e54618718" />
+<img width="368" height="240" alt="8月4日(4)" src="https://github.com/user-attachments/assets/644da392-458d-4d92-872b-d597b970babc" />
 <img width="368" height="240" alt="8月4日(1)" src="https://github.com/user-attachments/assets/ff3b8182-04d5-4d6c-bd9d-29d4e9dca551" />
 
 - **确认队列**：多个 Agent 的确认请求排队处理
 - **子任务归并**：并行子 agent 归到父任务的 subagent 列表，显示活跃subagent执行状态，并自动归纳
 - **智能抑制**：当你正盯着某 Agent 的终端时不弹面板（前台应用检测）
 - **点击跳转**：点会话即跳到对应 Agent 的终端窗口（Accessibility API）
+
   <img width="368" height="240" alt="8月4日(2)" src="https://github.com/user-attachments/assets/29f5a93e-6492-4aad-bdb9-a8eea50997a2" />
   
 - **像素宠物动画**：按状态切换的桌宠（就绪 / 运行 / 压缩 / 询问）
