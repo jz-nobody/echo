@@ -140,6 +140,7 @@ extension BridgeServer {
         defer { sqlite3_finalize(stmt) }
 
         let now = Date()
+        let desktopTitles = codexDesktopThreadTitles()
 
         while sqlite3_step(stmt) == SQLITE_ROW {
             guard let idPtr = sqlite3_column_text(stmt, 0) else { continue }
@@ -169,7 +170,8 @@ extension BridgeServer {
                 transcriptPaths[internalId] = rolloutStr
             }
 
-            var sessionTitle = titleStr
+            let desktopTitle = desktopTitles[threadId]
+            var sessionTitle = desktopTitle ?? titleStr
             if sessionTitle.isEmpty || sessionTitle == "New Session" {
                 if !firstMsg.isEmpty {
                     sessionTitle = truncateTitle(firstMsg)
@@ -181,9 +183,12 @@ extension BridgeServer {
             }
 
             if var existing = sessions[internalId] {
-                if updatedDate > existing.lastUpdate {
+                if (desktopTitle != nil && existing.title != sessionTitle)
+                    || updatedDate > existing.lastUpdate {
                     existing.title = sessionTitle
-                    existing.lastUpdate = updatedDate
+                    if updatedDate > existing.lastUpdate {
+                        existing.lastUpdate = updatedDate
+                    }
                     sessions[internalId] = existing
                 }
                 if updatedDate > (lastActivityDates[internalId] ?? .distantPast) {
@@ -218,19 +223,86 @@ extension BridgeServer {
         for (id, session) in sessions where session.agentType == .codex {
             guard let path = transcriptPaths[id],
                   let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-                  let size = (attrs[.size] as? NSNumber)?.uint64Value else { continue }
-            // Reuse the cached prompt unless the rollout has grown (avoids re-scanning
+                  let size = (attrs[.size] as? NSNumber)?.uint64Value,
+                  let modificationDate = attrs[.modificationDate] as? Date else { continue }
+            // Reuse cached rollout data unless the file has grown (avoids re-scanning
             // large, unchanged transcripts every poll).
             if let cached = codexPromptCache[id], cached.size == size {
                 sessions[id]?.lastUserPrompt = cached.prompt
-                continue
-            }
-            if let prompt = CodexRolloutParser.lastUserPrompt(atPath: path), !prompt.isEmpty {
+            } else if let prompt = CodexRolloutParser.lastUserPrompt(atPath: path), !prompt.isEmpty {
                 let capped = String(prompt.prefix(200))
                 codexPromptCache[id] = (size, capped)
                 sessions[id]?.lastUserPrompt = capped
             }
+
+            let turnState: CodexRolloutParser.TurnState?
+            if let cached = codexTurnStateCache[id], cached.size == size {
+                turnState = cached.state
+            } else {
+                turnState = CodexRolloutParser.latestTurnState(atPath: path)
+                codexTurnStateCache[id] = (size, turnState)
+            }
+
+            // A recent active rollout may correct a lone SessionStart/idle hook
+            // after Echo restarts mid-turn. Actionable and active hook states stay
+            // authoritative. The freshness bound prevents an abandoned task_started
+            // record from remaining "running" forever.
+            guard let turnState else { continue }
+            let hookStatus = sessionStates[id]?.status
+            switch turnState {
+            case .active:
+                let isFresh = Date().timeIntervalSince(modificationDate) < Self.codexActiveRolloutWindow
+                let hookAllowsFallback = hookStatus == nil || hookStatus == .idle
+                if isFresh, hookAllowsFallback,
+                   sessions[id]?.status == .idle || sessions[id]?.status == .completed {
+                    sessions[id]?.status = .executing
+                } else if !isFresh, hookStatus == nil, sessions[id]?.status.isActive == true {
+                    sessions[id]?.status = .idle
+                }
+            case .inactive:
+                if let hookStatus {
+                    sessions[id]?.status = hookStatus
+                } else if sessions[id]?.status.isActive == true {
+                    sessions[id]?.status = .idle
+                }
+            }
         }
+    }
+
+    private func codexDesktopThreadTitles() -> [String: String] {
+        let codexDir = (codexDbPath as NSString).deletingLastPathComponent
+        let desktopStatePath = codexDir + "/.codex-global-state.json"
+        var titles: [String: String] = [:]
+
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: desktopStatePath),
+           let size = (attrs[.size] as? NSNumber)?.uint64Value,
+           let modificationDate = attrs[.modificationDate] as? Date {
+            if let cached = codexDesktopTitleCache,
+               cached.size == size, cached.modificationDate == modificationDate {
+                titles = cached.titles
+            } else {
+                titles = CodexDesktopStateParser.threadDescriptions(atPath: desktopStatePath)
+                codexDesktopTitleCache = (size, modificationDate, titles)
+            }
+        }
+
+        let sessionIndexPath = codexDir + "/session_index.jsonl"
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: sessionIndexPath),
+           let size = (attrs[.size] as? NSNumber)?.uint64Value,
+           let modificationDate = attrs[.modificationDate] as? Date {
+            let names: [String: String]
+            if let cached = codexSessionIndexTitleCache,
+               cached.size == size, cached.modificationDate == modificationDate {
+                names = cached.titles
+            } else {
+                names = CodexDesktopStateParser.threadNames(atPath: sessionIndexPath)
+                codexSessionIndexTitleCache = (size, modificationDate, names)
+            }
+            // An explicit sidebar name is the canonical display title. The
+            // longer generated description remains a fallback only.
+            titles.merge(names) { _, sidebarName in sidebarName }
+        }
+        return titles
     }
 
     /// Reads recently-active subagent threads and nests them under their parent

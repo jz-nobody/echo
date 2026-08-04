@@ -6,6 +6,7 @@ actor BridgeServer {
     static let statusChangedNotification = Notification.Name("AgentIsland.statusChanged")
     static let sessionVisibilityTimeout: TimeInterval = 86400
     static let codexActiveSubagentWindow: TimeInterval = 300
+    static let codexActiveRolloutWindow: TimeInterval = 900
 
     // Agent registry
     let agentConfigs: [String: AgentConfig]
@@ -35,6 +36,12 @@ actor BridgeServer {
     var codexNestedParents: Set<String> = []
     // Codex — cached latest user prompt keyed by session id, invalidated by rollout size change
     var codexPromptCache: [String: (size: UInt64, prompt: String)] = [:]
+    // Codex — cached rollout lifecycle keyed by session id, invalidated by rollout size change
+    var codexTurnStateCache: [String: (size: UInt64, state: CodexRolloutParser.TurnState?)] = [:]
+    // Codex desktop — task descriptions keyed by thread id, invalidated by file metadata
+    var codexDesktopTitleCache: (size: UInt64, modificationDate: Date, titles: [String: String])?
+    // Codex desktop — user-visible sidebar names keyed by thread id
+    var codexSessionIndexTitleCache: (size: UInt64, modificationDate: Date, titles: [String: String])?
 
     // Claude-specific
     var sessionWatcher: SessionFileWatcher?

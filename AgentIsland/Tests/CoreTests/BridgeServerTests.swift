@@ -62,6 +62,19 @@ struct BridgeServerTests {
         let title: String
         let agentPath: String
         let updatedMs: Int64
+        let rolloutPath: String
+
+        init(
+            id: String, source: String, title: String, agentPath: String,
+            updatedMs: Int64, rolloutPath: String = ""
+        ) {
+            self.id = id
+            self.source = source
+            self.title = title
+            self.agentPath = agentPath
+            self.updatedMs = updatedMs
+            self.rolloutPath = rolloutPath
+        }
     }
 
     private func subagentSource(parent: String, nickname: String) -> String {
@@ -82,7 +95,7 @@ struct BridgeServerTests {
             """
         for r in rows {
             let esc = { (s: String) in s.replacingOccurrences(of: "'", with: "''") }
-            sql += "INSERT OR REPLACE INTO threads (id,title,cwd,rollout_path,first_user_message,created_at,updated_at,created_at_ms,updated_at_ms,source,agent_path,archived) VALUES ('\(esc(r.id))','\(esc(r.title))','/tmp','','',\(r.updatedMs/1000),\(r.updatedMs/1000),\(r.updatedMs),\(r.updatedMs),'\(esc(r.source))','\(esc(r.agentPath))',0);\n"
+            sql += "INSERT OR REPLACE INTO threads (id,title,cwd,rollout_path,first_user_message,created_at,updated_at,created_at_ms,updated_at_ms,source,agent_path,archived) VALUES ('\(esc(r.id))','\(esc(r.title))','/tmp','\(esc(r.rolloutPath))','',\(r.updatedMs/1000),\(r.updatedMs/1000),\(r.updatedMs),\(r.updatedMs),'\(esc(r.source))','\(esc(r.agentPath))',0);\n"
         }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
@@ -976,6 +989,92 @@ struct BridgeServerTests {
         let refreshed = await server.sessions["codex-refresh-1"]
         #expect(refreshed?.title == "继续修复 Skill 市场 QA 问题")
         #expect(refreshed?.lastUpdate.timeIntervalSince1970 == Double(nowMs + 1_000) / 1000.0)
+    }
+
+    @Test("Codex SQLite discovery reflects active rollout lifecycle without hooks")
+    func codexDiscoveryReflectsRolloutLifecycle() async throws {
+        let (server, dbDir) = try makeBridgeServerWithCodexDB()
+        let dbPath = dbDir + "/state_5.sqlite"
+        let rolloutPath = dbDir + "/rollout.jsonl"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try #"{"type":"event_msg","payload":{"type":"task_started"}}"#
+            .appending("\n")
+            .write(toFile: rolloutPath, atomically: true, encoding: .utf8)
+        try writeCodexThreads(dbPath: dbPath, rows: [
+            .init(
+                id: "active-rollout", source: "vscode", title: "Active task",
+                agentPath: "", updatedMs: nowMs, rolloutPath: rolloutPath
+            ),
+        ])
+
+        let respond = { @Sendable (_: HookResponse) in }
+        let start = makeHookMessage(type: "SessionStart", sessionId: "active-rollout")
+        await server.handleCodexStatusHook(
+            message: start, sessionId: "codex-active-rollout", clientPID: nil, respond: respond
+        )
+        await server.discoverCodexSessions()
+        #expect((await server.sessions["codex-active-rollout"])?.status == .executing)
+
+        let completion = #"{"type":"event_msg","payload":{"type":"task_complete"}}"# + "\n"
+        let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: rolloutPath))
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(completion.utf8))
+        try handle.close()
+
+        await server.discoverCodexSessions()
+        #expect((await server.sessions["codex-active-rollout"])?.status == .idle)
+    }
+
+    @Test("Stale unmatched Codex task_started does not remain running")
+    func staleCodexRolloutIsIdle() async throws {
+        let (server, dbDir) = try makeBridgeServerWithCodexDB()
+        let dbPath = dbDir + "/state_5.sqlite"
+        let rolloutPath = dbDir + "/stale-rollout.jsonl"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try (#"{"type":"event_msg","payload":{"type":"task_started"}}"# + "\n")
+            .write(toFile: rolloutPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(-Self.staleRolloutAge)],
+            ofItemAtPath: rolloutPath
+        )
+        try writeCodexThreads(dbPath: dbPath, rows: [
+            .init(
+                id: "stale-rollout", source: "vscode", title: "Abandoned task",
+                agentPath: "", updatedMs: nowMs, rolloutPath: rolloutPath
+            ),
+        ])
+
+        await server.discoverCodexSessions()
+        #expect((await server.sessions["codex-stale-rollout"])?.status == .idle)
+    }
+
+    private static let staleRolloutAge: TimeInterval = BridgeServer.codexActiveRolloutWindow + 60
+
+    @Test("Codex sidebar name beats desktop description and stale SQLite title")
+    func codexSidebarNameOverridesDescriptionAndTitle() async throws {
+        let (server, dbDir) = try makeBridgeServerWithCodexDB()
+        let dbPath = dbDir + "/state_5.sqlite"
+        let desktopStatePath = dbDir + "/.codex-global-state.json"
+        let sessionIndexPath = dbDir + "/session_index.jsonl"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        try writeCodexThreads(dbPath: dbPath, rows: [
+            .init(
+                id: "desktop-title", source: "vscode", title: "Original long prompt",
+                agentPath: "", updatedMs: nowMs
+            ),
+        ])
+
+        let description = #"{"electron-persisted-atom-state":{"thread-descriptions-v1":{"desktop-title":"接手 MobileAgentsHub skill-catalog-server"}}}"#
+        try description.write(toFile: desktopStatePath, atomically: true, encoding: .utf8)
+        let first = #"{"id":"desktop-title","thread_name":"继续修复 Skill 市场 QA","updated_at":"2026-08-04T00:00:00Z"}"#
+        try (first + "\n").write(toFile: sessionIndexPath, atomically: true, encoding: .utf8)
+        await server.discoverCodexSessions()
+        #expect((await server.sessions["codex-desktop-title"])?.title == "继续修复 Skill 市场 QA")
+
+        let second = #"{"id":"desktop-title","thread_name":"继续修复 Skill 市场 QA 问题 xxx","updated_at":"2026-08-04T00:01:00Z"}"#
+        try (first + "\n" + second + "\n").write(toFile: sessionIndexPath, atomically: true, encoding: .utf8)
+        await server.discoverCodexSessions()
+        #expect((await server.sessions["codex-desktop-title"])?.title == "继续修复 Skill 市场 QA 问题 xxx")
     }
 
     @Test("parseCodexSubagentSource extracts parent + nickname from subagent JSON")

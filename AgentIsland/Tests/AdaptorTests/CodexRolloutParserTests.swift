@@ -62,4 +62,27 @@ struct CodexRolloutParserTests {
         ])
         #expect(CodexRolloutParser.lastUserPrompt(atPath: path) == nil)
     }
+
+    @Test("latest task_started means the Codex turn is active")
+    func activeTurn() throws {
+        let path = try writeTempRollout([
+            #"{"type":"event_msg","payload":{"type":"task_complete"}}"#,
+            #"{"type":"event_msg","payload":{"type":"task_started"}}"#,
+        ])
+        #expect(CodexRolloutParser.latestTurnState(atPath: path) == .active)
+    }
+
+    @Test("task completion and abort close the Codex turn")
+    func inactiveTurn() throws {
+        let completed = try writeTempRollout([
+            #"{"type":"event_msg","payload":{"type":"task_started"}}"#,
+            #"{"type":"event_msg","payload":{"type":"task_complete"}}"#,
+        ])
+        let aborted = try writeTempRollout([
+            #"{"type":"event_msg","payload":{"type":"task_started"}}"#,
+            #"{"type":"event_msg","payload":{"type":"turn_aborted"}}"#,
+        ])
+        #expect(CodexRolloutParser.latestTurnState(atPath: completed) == .inactive)
+        #expect(CodexRolloutParser.latestTurnState(atPath: aborted) == .inactive)
+    }
 }

@@ -5,6 +5,11 @@ import Foundation
 /// carry only `first_user_message`; the newest prompt lives in the rollout log.
 enum CodexRolloutParser {
 
+    enum TurnState: Sendable, Equatable {
+        case active
+        case inactive
+    }
+
     private static let chunkSize: UInt64 = 262_144
     private static let maxScanDepth: UInt64 = 4_194_304   // cap backward scan at 4 MB
 
@@ -42,6 +47,43 @@ enum CodexRolloutParser {
                           type == "input_text" || type == "text",
                           let raw = item["text"] as? String else { continue }
                     if let cleaned = cleanUserText(raw) { return cleaned }
+                }
+            }
+            scanned += readSize
+        }
+        return nil
+    }
+
+    /// Returns whether the latest Codex turn is still running. This is a fallback
+    /// for desktop sessions whose command hooks are not loaded or trusted yet.
+    /// `task_started` opens a turn; both normal completion and abort close it.
+    static func latestTurnState(atPath path: String) -> TurnState? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { handle.closeFile() }
+        let fileSize = handle.seekToEndOfFile()
+        guard fileSize > 0 else { return nil }
+
+        var scanned: UInt64 = 0
+        while scanned < min(fileSize, maxScanDepth) {
+            let end = fileSize - scanned
+            let readSize = min(chunkSize, end)
+            let offset = end - readSize
+            handle.seek(toFileOffset: offset)
+            guard let text = String(data: handle.readData(ofLength: Int(readSize)), encoding: .utf8) else { break }
+
+            for line in text.components(separatedBy: "\n").reversed() {
+                guard line.contains("\"task_started\"")
+                        || line.contains("\"task_complete\"")
+                        || line.contains("\"turn_aborted\"") else { continue }
+                guard let data = line.data(using: .utf8),
+                      let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      obj["type"] as? String == "event_msg",
+                      let payload = obj["payload"] as? [String: Any],
+                      let type = payload["type"] as? String else { continue }
+                switch type {
+                case "task_started": return .active
+                case "task_complete", "turn_aborted": return .inactive
+                default: continue
                 }
             }
             scanned += readSize
