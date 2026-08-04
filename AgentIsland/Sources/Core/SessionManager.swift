@@ -137,9 +137,8 @@ final class SessionManager {
             prev = .idle
         }
 
-        if let idx = sessions.firstIndex(where: { $0.id == sessionId }) {
-            sessions[idx].status = status
-        }
+        guard let idx = sessions.firstIndex(where: { $0.id == sessionId }) else { return }
+        sessions[idx].status = status
 
         playTransitionSound(from: prev, to: status)
 
@@ -154,9 +153,9 @@ final class SessionManager {
             event = .compactingCompleted
         } else if prev != .waitingConfirmation && status == .waitingConfirmation {
             event = .askingUser
-        } else if prev.isActive && (status == .completed || status == .idle) {
-            event = .runningCompleted
         } else {
+            // Completion sounds come from SessionEventDetector during polling,
+            // where visibility and active-subagent context are available.
             event = nil
         }
         if let event {

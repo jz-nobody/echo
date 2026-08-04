@@ -109,7 +109,7 @@ extension BridgeServer {
         return true
     }
 
-    func respond(confirmationId: String, response: ConfirmationResponse) throws {
+    func respond(confirmationId: String, response: ConfirmationResponse) async throws {
         guard let confirmation = pendingConfirmations[confirmationId],
               let sessionId = confirmationToSession[confirmationId] else {
             NSLog("[BridgeServer] respond: confirmation not found for \(confirmationId)")
@@ -119,7 +119,10 @@ extension BridgeServer {
         NSLog("[BridgeServer] respond: \(confirmationId.prefix(20)) type=\(confirmation.type) response=\(response)")
 
         if let chatId = qoderWorkChatIds[confirmationId] {
-            respondViaQoderWorkMCP(chatId: chatId, confirmation: confirmation, response: response)
+            // Await MCP delivery; only clear the confirmation once it succeeds.
+            // On failure, rethrow WITHOUT cleanup so the confirmation stays
+            // pending and the UI re-shows the card instead of silently dropping.
+            try await respondViaQoderWorkMCP(chatId: chatId, confirmation: confirmation, response: response)
             cleanupConfirmation(confirmationId)
             let hasRemaining = confirmationToSession.values.contains(sessionId)
             if !hasRemaining {
@@ -336,23 +339,28 @@ extension BridgeServer {
 
     private func respondViaQoderWorkMCP(
         chatId: String, confirmation: PendingConfirmation, response: ConfirmationResponse
-    ) {
-        guard case .choice(let details) = confirmation.details, let header = details.header else {
-            NSLog("[BridgeServer] QoderWork MCP: missing header for \(confirmation.id.prefix(20))")
-            return
+    ) async throws {
+        // QoderWork keys answers by the question header. Header is required by
+        // the AskUserQuestion spec but parsed as optional here, so fall back to
+        // the question text (then the title) instead of dropping the answer.
+        let key: String
+        if case .choice(let details) = confirmation.details {
+            key = details.header ?? details.question
+        } else {
+            key = confirmation.title
         }
         switch response {
         case .deny:
-            QoderWorkMCPClient.respondTask(chatId: chatId, action: "deny")
+            try await QoderWorkMCPClient.respondTask(chatId: chatId, action: "deny")
         case .select(let optionId):
-            QoderWorkMCPClient.respondTask(chatId: chatId, action: "answer", answers: [header: optionId])
+            try await QoderWorkMCPClient.respondTask(chatId: chatId, action: "answer", answers: [key: optionId])
         case .multiSelect(let optionIds):
-            QoderWorkMCPClient.respondTask(
+            try await QoderWorkMCPClient.respondTask(
                 chatId: chatId, action: "answer",
-                answers: [header: optionIds.joined(separator: ", ")]
+                answers: [key: optionIds.joined(separator: ", ")]
             )
         case .freeText(let text):
-            QoderWorkMCPClient.respondTask(chatId: chatId, action: "answer", answers: [header: text])
+            try await QoderWorkMCPClient.respondTask(chatId: chatId, action: "answer", answers: [key: text])
         default:
             break
         }

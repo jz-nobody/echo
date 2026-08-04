@@ -55,6 +55,57 @@ struct SessionManagerSoundTests {
         #expect(soundPlayer.playedEvents.contains(.sessionStart))
     }
 
+    @Test("status notification for hidden Codex subagent does not play completion")
+    @MainActor
+    func hiddenCodexSubagentNotificationDoesNotPlayCompletion() throws {
+        let server = try makeMockBridgeServer()
+        let soundPlayer = MockSoundPlayer()
+        let manager = SessionManager(
+            bridgeServer: server, settingsStore: makeSettings(), soundPlayer: soundPlayer
+        )
+        manager.startPolling()
+
+        NotificationCenter.default.post(
+            name: BridgeServer.statusChangedNotification,
+            object: nil,
+            userInfo: [
+                "sessionId": "codex-hidden-child",
+                "status": SessionStatus.idle,
+                "previousStatus": SessionStatus.executing,
+            ]
+        )
+
+        manager.stopPolling()
+        #expect(!soundPlayer.playedEvents.contains(.runningCompleted))
+    }
+
+    @Test("completion transition is played once by polling")
+    @MainActor
+    func completionTransitionUsesSingleSoundPath() async throws {
+        let server = try makeMockBridgeServer()
+        let soundPlayer = MockSoundPlayer()
+        let manager = SessionManager(
+            bridgeServer: server, settingsStore: makeSettings(), soundPlayer: soundPlayer
+        )
+        await server.injectSession(makeSession(id: "visible-task", status: .executing))
+        await manager.pollOnce()
+
+        await server.injectSession(makeSession(id: "visible-task", status: .idle))
+        NotificationCenter.default.post(
+            name: BridgeServer.statusChangedNotification,
+            object: nil,
+            userInfo: [
+                "sessionId": "visible-task",
+                "status": SessionStatus.idle,
+                "previousStatus": SessionStatus.executing,
+            ]
+        )
+        #expect(soundPlayer.playedEvents.filter { $0 == .runningCompleted }.isEmpty)
+
+        await manager.pollOnce()
+        #expect(soundPlayer.playedEvents.filter { $0 == .runningCompleted }.count == 1)
+    }
+
     @Test("respond allow triggers confirmationApproved")
     @MainActor
     func respondAllowTriggersApproved() async throws {

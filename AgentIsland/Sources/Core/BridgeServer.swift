@@ -4,7 +4,7 @@ actor BridgeServer {
 
     static let confirmationReceivedNotification = Notification.Name("AgentIsland.confirmationReceived")
     static let statusChangedNotification = Notification.Name("AgentIsland.statusChanged")
-    static let sessionVisibilityTimeout: TimeInterval = 172800
+    static let sessionVisibilityTimeout: TimeInterval = 86400
     static let codexActiveSubagentWindow: TimeInterval = 300
 
     // Agent registry
@@ -137,9 +137,6 @@ actor BridgeServer {
             .filter { !backgroundSessionIds.contains($0.id) }
             .filter { !codexSubagentThreadIds.contains($0.id) }
             .filter { session in
-                if let pid = session.terminalInfo?.pid, isProcessAlive(pid) {
-                    return true
-                }
                 let lastActivity = lastActivityDates[session.id] ?? session.lastUpdate
                 return now.timeIntervalSince(lastActivity) < Self.sessionVisibilityTimeout
             }

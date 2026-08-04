@@ -7,11 +7,13 @@ struct SessionEventDetectorTests {
 
     private func makeSession(
         id: String = "s1",
-        status: SessionStatus = .executing
+        status: SessionStatus = .executing,
+        agentType: AgentType = .qoderWork,
+        subagents: [SubagentInfo]? = nil
     ) -> AgentSession {
-        AgentSession(
+        var session = AgentSession(
             id: id,
-            agentType: .qoderWork,
+            agentType: agentType,
             title: "Task",
             status: status,
             startTime: Date(),
@@ -19,6 +21,8 @@ struct SessionEventDetectorTests {
             terminalInfo: nil,
             currentToolCall: nil
         )
+        session.subagents = subagents
+        return session
     }
 
     private func makeConfirmation(id: String = "c1") -> PendingConfirmation {
@@ -97,6 +101,53 @@ struct SessionEventDetectorTests {
         #expect(events.contains(.sessionEnd))
     }
 
+    @Test("temporarily hidden Codex session does not emit sessionEnd")
+    @MainActor
+    func hiddenCodexSessionDoesNotEmitEnd() {
+        let detector = SessionEventDetector()
+        let health = AdaptorHealth()
+
+        _ = detector.detect(
+            sessions: [makeSession(id: "codex-child", agentType: .codex)],
+            confirmations: [:],
+            health: health
+        )
+
+        let events = detector.detect(sessions: [], confirmations: [:], health: health)
+        #expect(!events.contains(.sessionEnd))
+    }
+
+    @Test("Codex parent becoming idle while a subagent is active does not sound complete")
+    @MainActor
+    func codexParentWithSubagentDoesNotSoundComplete() {
+        let detector = SessionEventDetector()
+        let health = AdaptorHealth()
+        let activeSubagent = SubagentInfo(
+            id: "codex-child", description: "Worker",
+            agentType: "codex", isComplete: false
+        )
+
+        _ = detector.detect(
+            sessions: [makeSession(
+                id: "codex-parent", status: .executing,
+                agentType: .codex, subagents: [activeSubagent]
+            )],
+            confirmations: [:],
+            health: health
+        )
+
+        let events = detector.detect(
+            sessions: [makeSession(
+                id: "codex-parent", status: .idle,
+                agentType: .codex, subagents: [activeSubagent]
+            )],
+            confirmations: [:],
+            health: health
+        )
+        #expect(!events.contains(.runningCompleted))
+        #expect(!events.contains(.sessionEnd))
+    }
+
     @Test("session completed emits sessionEnd")
     @MainActor
     func sessionCompletedEmitsEnd() {
@@ -115,6 +166,7 @@ struct SessionEventDetectorTests {
             health: health
         )
         #expect(events.contains(.sessionEnd))
+        #expect(!events.contains(.runningCompleted))
     }
 
     @Test("new confirmation emits confirmationArrived")

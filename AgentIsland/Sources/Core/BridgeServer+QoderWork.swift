@@ -31,7 +31,13 @@ extension BridgeServer {
             confirmationToSession[confId] = wsId
             clientToConfirmation[clientID] = confId
             questionInputs[confId] = message.toolInput ?? [:]
-            qoderWorkChatIds[confId] = extractQoderWorkChatId(from: message.cwd)
+            // chatId for qoder_respond_task must be the chat's primary key,
+            // which is the raw hook session_id (== the .jsonl transcript base name),
+            // NOT the workspace directory name from cwd. A single workspace dir can
+            // contain multiple chats, so the dir name can't identify the pending chat.
+            qoderWorkChatIds[confId] = message.sessionId.isEmpty
+                ? extractQoderWorkChatId(from: message.cwd)
+                : message.sessionId
             respond(.empty)
             applyEvent(.permissionRequest, sessionId: wsId)
             NotificationCenter.default.post(name: Self.confirmationReceivedNotification, object: nil)

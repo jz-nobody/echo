@@ -6,6 +6,8 @@ final class SessionEventDetector {
     struct Snapshot {
         let sessionIDs: Set<String>
         let sessionStatuses: [String: SessionStatus]
+        let agentTypes: [String: AgentType]
+        let sessionsWithActiveSubagents: Set<String>
         let confirmationIDs: Set<String>
         let adaptorOnline: Set<AgentType>
     }
@@ -52,8 +54,14 @@ final class SessionEventDetector {
     ) -> Snapshot {
         let sessionIDs = Set(sessions.map(\.id))
         var sessionStatuses: [String: SessionStatus] = [:]
+        var agentTypes: [String: AgentType] = [:]
+        var sessionsWithActiveSubagents = Set<String>()
         for session in sessions {
             sessionStatuses[session.id] = session.status
+            agentTypes[session.id] = session.agentType
+            if session.subagents?.contains(where: { !$0.isComplete }) == true {
+                sessionsWithActiveSubagents.insert(session.id)
+            }
         }
 
         var confirmationIDs = Set<String>()
@@ -73,6 +81,8 @@ final class SessionEventDetector {
         return Snapshot(
             sessionIDs: sessionIDs,
             sessionStatuses: sessionStatuses,
+            agentTypes: agentTypes,
+            sessionsWithActiveSubagents: sessionsWithActiveSubagents,
             confirmationIDs: confirmationIDs,
             adaptorOnline: adaptorOnline
         )
@@ -98,7 +108,8 @@ final class SessionEventDetector {
         into events: inout [SoundEvent]
     ) {
         let goneIDs = previous.sessionIDs.subtracting(current.sessionIDs)
-        if !goneIDs.isEmpty {
+        let audibleGoneIDs = goneIDs.filter { previous.agentTypes[$0] != .codex }
+        if !audibleGoneIDs.isEmpty {
             events.append(.sessionEnd)
         }
 
@@ -170,7 +181,12 @@ final class SessionEventDetector {
                 events.append(.compactingCompleted)
             } else if prev != .waitingConfirmation && curr == .waitingConfirmation {
                 events.append(.askingUser)
-            } else if prev.isActive && (curr == .completed || curr == .idle) {
+            } else if prev.isActive && curr == .idle {
+                let isCodex = current.agentTypes[id] == .codex
+                    || previous.agentTypes[id] == .codex
+                let hasActiveCodexWork = previous.sessionsWithActiveSubagents.contains(id)
+                    || current.sessionsWithActiveSubagents.contains(id)
+                if isCodex && hasActiveCodexWork { continue }
                 events.append(.runningCompleted)
             }
         }

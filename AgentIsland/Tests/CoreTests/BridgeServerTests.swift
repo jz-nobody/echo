@@ -794,8 +794,8 @@ struct BridgeServerTests {
         #expect(captured == .empty)
     }
 
-    @Test("Alive process bypasses 48h visibility filter")
-    func aliveProcessBypassesVisibilityFilter() async throws {
+    @Test("Alive process does not bypass 24h inactivity filter")
+    func aliveProcessDoesNotBypassInactivityFilter() async throws {
         let server = try makeBridgeServer()
         let respond = { @Sendable (_: HookResponse) in }
 
@@ -804,12 +804,37 @@ struct BridgeServerTests {
             message: msg, sessionId: "claudeCode-old-1", respond: respond
         )
 
-        let threeDaysAgo = Date().addingTimeInterval(-259200)
-        await server.setLastActivityDate(threeDaysAgo, for: "claudeCode-old-1")
+        let twentyFiveHoursAgo = Date().addingTimeInterval(-90000)
+        await server.setLastActivityDate(twentyFiveHoursAgo, for: "claudeCode-old-1")
         await server.setTerminalPid(ProcessInfo.processInfo.processIdentifier, for: "claudeCode-old-1")
 
         let visible = await server.discoverAllSessions()
-        #expect(visible.contains { $0.id == "claudeCode-old-1" })
+        #expect(!visible.contains { $0.id == "claudeCode-old-1" })
+    }
+
+    @Test("Session hidden after 24h reappears when new activity arrives")
+    func inactiveSessionReappearsOnActivity() async throws {
+        let (server, _) = try makeBridgeServerWithCodexDB()
+        let respond = { @Sendable (_: HookResponse) in }
+
+        let start = makeHookMessage(type: "SessionStart", sessionId: "reactivate-1")
+        await server.handleCodexStatusHook(
+            message: start, sessionId: "codex-reactivate-1", clientPID: nil, respond: respond
+        )
+        await server.setLastActivityDate(
+            Date().addingTimeInterval(-90000), for: "codex-reactivate-1"
+        )
+
+        let hidden = await server.discoverAllSessions()
+        #expect(!hidden.contains { $0.id == "codex-reactivate-1" })
+
+        let activity = makeHookMessage(type: "UserPromptSubmit", sessionId: "reactivate-1")
+        await server.handleCodexStatusHook(
+            message: activity, sessionId: "codex-reactivate-1", clientPID: nil, respond: respond
+        )
+
+        let visibleAgain = await server.discoverAllSessions()
+        #expect(visibleAgain.contains { $0.id == "codex-reactivate-1" })
     }
 
     // MARK: - Agent Process Death Detection
@@ -905,7 +930,7 @@ struct BridgeServerTests {
         #expect(pid == nil)
     }
 
-    @Test("Dead process still filtered by 48h rule")
+    @Test("Dead process is filtered by 24h rule")
     func deadProcessFilteredByTimeout() async throws {
         let server = try makeBridgeServer()
         let respond = { @Sendable (_: HookResponse) in }
@@ -915,8 +940,8 @@ struct BridgeServerTests {
             message: msg, sessionId: "claudeCode-old-2", respond: respond
         )
 
-        let threeDaysAgo = Date().addingTimeInterval(-259200)
-        await server.setLastActivityDate(threeDaysAgo, for: "claudeCode-old-2")
+        let twentyFiveHoursAgo = Date().addingTimeInterval(-90000)
+        await server.setLastActivityDate(twentyFiveHoursAgo, for: "claudeCode-old-2")
         await server.setTerminalPid(99999, for: "claudeCode-old-2")
 
         let visible = await server.discoverAllSessions()
@@ -924,6 +949,34 @@ struct BridgeServerTests {
     }
 
     // MARK: - Codex Subagent Nesting
+
+    @Test("Codex SQLite discovery refreshes an existing session")
+    func codexDiscoveryRefreshesExistingSession() async throws {
+        let (server, dbDir) = try makeBridgeServerWithCodexDB()
+        let dbPath = dbDir + "/state_5.sqlite"
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        try writeCodexThreads(dbPath: dbPath, rows: [
+            .init(
+                id: "refresh-1", source: "vscode", title: "Old database title",
+                agentPath: "", updatedMs: nowMs
+            ),
+        ])
+        await server.discoverCodexSessions()
+        #expect((await server.sessions["codex-refresh-1"])?.title == "Old database title")
+
+        try writeCodexThreads(dbPath: dbPath, rows: [
+            .init(
+                id: "refresh-1", source: "vscode", title: "继续修复 Skill 市场 QA 问题",
+                agentPath: "", updatedMs: nowMs + 1_000
+            ),
+        ])
+        await server.discoverCodexSessions()
+
+        let refreshed = await server.sessions["codex-refresh-1"]
+        #expect(refreshed?.title == "继续修复 Skill 市场 QA 问题")
+        #expect(refreshed?.lastUpdate.timeIntervalSince1970 == Double(nowMs + 1_000) / 1000.0)
+    }
 
     @Test("parseCodexSubagentSource extracts parent + nickname from subagent JSON")
     func parseCodexSubagentSourceExtracts() async throws {

@@ -169,8 +169,6 @@ extension BridgeServer {
                 transcriptPaths[internalId] = rolloutStr
             }
 
-            guard sessions[internalId] == nil else { continue }
-
             var sessionTitle = titleStr
             if sessionTitle.isEmpty || sessionTitle == "New Session" {
                 if !firstMsg.isEmpty {
@@ -180,6 +178,18 @@ extension BridgeServer {
                 }
             } else {
                 sessionTitle = truncateTitle(sessionTitle)
+            }
+
+            if var existing = sessions[internalId] {
+                if updatedDate > existing.lastUpdate {
+                    existing.title = sessionTitle
+                    existing.lastUpdate = updatedDate
+                    sessions[internalId] = existing
+                }
+                if updatedDate > (lastActivityDates[internalId] ?? .distantPast) {
+                    lastActivityDates[internalId] = updatedDate
+                }
+                continue
             }
 
             let startDate: Date
