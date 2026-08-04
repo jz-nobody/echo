@@ -56,7 +56,7 @@ Echo 常驻在 Mac 顶部刘海区。当你在浏览网页、写文档、做其�
 
 - **选择题面板**：单选 / 多选 / 自由文本输入，支持一次多问的分组应答
 
-<img width="368" height="240" alt="8月4日(4)" src="https://github.com/user-attachments/assets/644da392-458d-4d92-872b-d597b970babc" />
+<img width="368" height="240" alt="8月4日 (1)" src="https://github.com/user-attachments/assets/634613f5-ed89-4e50-a4a5-1bbcaa16f173" />
 <img width="368" height="240" alt="8月4日(1)" src="https://github.com/user-attachments/assets/ff3b8182-04d5-4d6c-bd9d-29d4e9dca551" />
 
 - **确认队列**：多个 Agent 的确认请求排队处理
